@@ -63,24 +63,22 @@ class ConceptDependencyTree(object):
     def _create_prereq_map(self):
         queue = deque()
         queue.append(self.root)
-        while(True):
+        while len(queue) > 0:
             cur = queue.popleft()
             self._add_prereqs(cur)
-            children = self.edges[cur]
+            children = self.children[cur]
             queue.extend(children)
 
 
     def _add_prereqs(self, cur):
         # get parents of cur
         parents = self.parents[cur]
-        self.prereq_map[cur].add(parents)
+
+        self.prereq_map[cur] = self.prereq_map[cur].union(set(parents))
 
         for p in parents:
-            self.prereq_map[cur].add(self.prereq_map[p])
+            self.prereq_map[cur] = self.prereq_map[cur].union(self.prereq_map[p])
 
-
-    def print_edges(self):
-        print self.edges
 
     def get_prereqs(self, concept):
         prereqs = np.zeros((N_CONCEPTS,))
@@ -148,8 +146,10 @@ class Student(object):
 def main():
     tree = ConceptDependencyTree()
     tree.init_default_tree(n=11)
-    tree.print_edges()
-    s = Student()
+    print tree.children
+    print tree.parents
+    print tree.prereq_map
+    # s = Student()
 
 if __name__ == "__main__":
     main()
