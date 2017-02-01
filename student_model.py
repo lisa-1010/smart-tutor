@@ -13,17 +13,22 @@
 
 import numpy as np
 import random
+from collections import defaultdict, deque
 
 
 # Params / Constants
 N_CONCEPTS = 10
 N_EXERCISES = 100
+P_TRANS_SATISFIED = 0.5
+P_TRANS_NOT_SATISFIED = 0.0
 
 
 class ConceptDependencyTree(object):
     def __init__(self):
         self.root = None
-        self.edges = [] # edges go from parent (e.g. prerequisite) to child
+        self.children = defaultdict(list) # edges go from parent (e.g. prerequisite) to child
+        self.parents = defaultdict(list)
+        self.prereq_map = defaultdict(set)
 
 
     def init_default_tree(self, n):
@@ -44,16 +49,49 @@ class ConceptDependencyTree(object):
         self.root = 0
         for i in xrange(0, n):
             if 2 * i + 1 < n:
-                self.edges.append((i, 2 * i + 1))
+                self.children[i].append(2 * i + 1)
+                self.parents[2 * i + 1].append(i)
             else:
                 # for leaf nodes, add a pseudo edge pointing to -1.
-                self.edges.append((i, -1))
+                self.children[i].append(-1)
             if 2 * i + 2 < n:
-                self.edges.append((i, 2 * i + 2))
+                self.children[i].append(2 * i + 2)
+                self.parents[2 * i + 2].append(i)
+        self._create_prereq_map()
+
+
+    def _create_prereq_map(self):
+        queue = deque()
+        queue.append(self.root)
+        while(True):
+            cur = queue.popleft()
+            self._add_prereqs(cur)
+            children = self.edges[cur]
+            queue.extend(children)
+
+
+    def _add_prereqs(self, cur):
+        # get parents of cur
+        parents = self.parents[cur]
+        self.prereq_map[cur].add(parents)
+
+        for p in parents:
+            self.prereq_map[cur].add(self.prereq_map[p])
+
 
     def print_edges(self):
         print self.edges
 
+    def get_prereqs(self, concept):
+        prereqs = np.zeros((N_CONCEPTS,))
+        for p in self.prereq_map[concept]:
+            prereqs[p] = 1
+        return prereqs
+
+
+
+concept_dep_tree = ConceptDependencyTree()
+concept_dep_tree.init_default_tree(n=N_CONCEPTS)
 
 
 class Exercise(object):
@@ -81,20 +119,37 @@ class Student(object):
         # other potential member variables
         # self.motivation = 1
 
-    def practice(self, exercise):
-        '''
 
-        :param exercise: an Exercise object
+    def do_exercise(self, ex):
+        '''
+        :param ex: an Exercise object
         :return:
         '''
-        pass
+        if self._fulfilled_prereqs(ex):
+            return 1 if random.random() <= P_TRANS_SATISFIED else 0
+        else:
+            return 1 if random.random() <= P_TRANS_NOT_SATISFIED else 0
 
+
+    def _fulfilled_prereqs(self, ex):
+        '''
+        for each concept tested in the exercise, check if all prereqs are fulfilled.
+        if prereqs for at least one concept are not fulfilled, then function returns False.
+        :return: bool
+        '''
+        for c in ex.concepts:
+            #
+            if c == 1:
+                prereqs = concept_dep_tree.get_prereqs(c)
+                if np.sum(np.multiply(self.knowledge, prereqs)) == 0:
+                    return False
+        return True
 
 def main():
     tree = ConceptDependencyTree()
     tree.init_default_tree(n=11)
     tree.print_edges()
-
+    s = Student()
 
 if __name__ == "__main__":
     main()
