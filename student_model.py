@@ -5,7 +5,13 @@
 #===============================================================================
 # DESCRIPTION:
 # Ground truth student model for data generation.
+# 1. n concepts (e.g. 10)
+# 2. k exercises (e.g. 1000)
 #
+# ### Student Model
+# At any time t, a student s can be represented by the concepts she knows.
+# Hence, s is a n-dim vector, where each index i corresponds to concept i.
+
 #===============================================================================
 # CURRENT STATUS: In progress
 #===============================================================================
@@ -142,6 +148,16 @@ class Student(object):
                 if np.sum(np.multiply(self.knowledge, prereqs)) == 0:
                     return False
         return True
+
+
+
+def generate_student_sample():
+    pass
+
+def generate_data(n_students=1000, seqlen=50):
+    # generate sequences for n_students
+    # each sequence of length
+    pass
 
 def main():
     tree = ConceptDependencyTree()
