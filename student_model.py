@@ -1,4 +1,4 @@
-# student_model.py
+# synthetic_data_model.py
 # @author: Lisa Wang
 # @created: Jan 30 2016
 #
@@ -15,7 +15,7 @@
 #===============================================================================
 # CURRENT STATUS: In progress
 #===============================================================================
-# USAGE:
+# USAGE: from student_model import *
 
 import numpy as np
 import random
@@ -26,7 +26,7 @@ from collections import defaultdict, deque
 N_CONCEPTS = 10
 N_EXERCISES = 100
 P_TRANS_SATISFIED = 0.5
-P_TRANS_NOT_SATISFIED = 0.0
+P_TRANS_NOT_SATISFIED = 0.1
 
 
 class ConceptDependencyTree(object):
@@ -105,7 +105,7 @@ class Exercise(object):
         Could be one-hot for simple model, so each exercise practices exactly one concept.
         '''
         # if concepts is None, a random concept is chosen.
-        if concepts:
+        if concepts != None:
             self.concepts = concepts
         else:
             # create a one hot vector for concepts
@@ -115,7 +115,7 @@ class Exercise(object):
 
 class Student(object):
     def __init__(self, initial_knowledge=None):
-        if initial_knowledge:
+        if initial_knowledge != None:
             self.knowledge = initial_knowledge
         else:
             self.knowledge = np.zeros((N_CONCEPTS,))
@@ -130,7 +130,10 @@ class Student(object):
         :return:
         '''
         if self._fulfilled_prereqs(ex):
-            return 1 if random.random() <= P_TRANS_SATISFIED else 0
+            if random.random() <= P_TRANS_SATISFIED:
+                for c in xrange(len(ex.concepts)):
+                    if ex.concepts[c] == 1:
+                        self.knowledge[c] = 1
         else:
             return 1 if random.random() <= P_TRANS_NOT_SATISFIED else 0
 
@@ -141,18 +144,46 @@ class Student(object):
         if prereqs for at least one concept are not fulfilled, then function returns False.
         :return: bool
         '''
-        for c in ex.concepts:
-            #
+        for i in xrange(len(ex.concepts)):
+            c = ex.concepts[i]
             if c == 1:
-                prereqs = concept_dep_tree.get_prereqs(c)
-                if np.sum(np.multiply(self.knowledge, prereqs)) == 0:
+                prereqs = concept_dep_tree.get_prereqs(i)
+                if np.sum(np.multiply(self.knowledge, prereqs)) != np.sum(prereqs):
                     return False
         return True
 
 
+def generate_student_sample(seqlen=1000, exercise_seq=None, initial_knowledge=None, verbose=True):
+    '''
 
-def generate_student_sample():
-    pass
+    :param seqlen: number of exercises the student will do.
+    :param exercise_seq: Sequence of exercises. list of exercise objects.
+        If None, this function will generate the default sequence [0 .. seqlen - 1]
+    :param initial_knowledge: initial knowledge of student. If None, will be set to 0 for all concepts.
+    :return:
+    '''
+
+    initial_knowledge = np.zeros((N_CONCEPTS,))
+    initial_knowledge[0] = 1
+    s = Student(initial_knowledge)
+
+    if not exercise_seq:
+        exercise_seq = []
+        for i in xrange(seqlen):
+            concepts = np.zeros((N_CONCEPTS,))
+            # concepts[random.randint(0, N_CONCEPTS - 1)] = 1
+            concepts[i % N_CONCEPTS] = 1
+            ex = Exercise(concepts=concepts)
+            exercise_seq.append(ex)
+
+    for i, ex in enumerate(exercise_seq):
+        s.do_exercise(ex)
+        print s.knowledge
+        if np.sum(s.knowledge) == N_CONCEPTS:
+            if verbose:
+                print "learned all concepts after {} exercises.".format(i)
+            break
+
 
 def generate_data(n_students=1000, seqlen=50):
     # generate sequences for n_students
@@ -160,12 +191,12 @@ def generate_data(n_students=1000, seqlen=50):
     pass
 
 def main():
-    tree = ConceptDependencyTree()
-    tree.init_default_tree(n=11)
-    print tree.children
-    print tree.parents
-    print tree.prereq_map
-    # s = Student()
+    # tree = ConceptDependencyTree()
+    # tree.init_default_tree(n=11)
+    # print tree.children
+    # print tree.parents
+    # print tree.prereq_map
+    generate_student_sample()
 
 if __name__ == "__main__":
     main()
