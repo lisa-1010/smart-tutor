@@ -1,4 +1,4 @@
-# synthetic_data_model.py
+# data_generator.py
 # @author: Lisa Wang
 # @created: Jan 30 2016
 #
@@ -15,7 +15,7 @@
 #===============================================================================
 # CURRENT STATUS: In progress
 #===============================================================================
-# USAGE: from student_model import *
+# USAGE: from data_generator import *
 
 import numpy as np
 import random
@@ -24,12 +24,13 @@ from collections import defaultdict, deque
 
 # Params / Constants
 N_CONCEPTS = 10
-N_EXERCISES = 100
-P_TRANS_SATISFIED = 0.5
-P_TRANS_NOT_SATISFIED = 0.1
+# N_EXERCISES = 100
+
+# P_TRANS_SATISFIED = 0.5
+# P_TRANS_NOT_SATISFIED = 0.1
 
 
-class ConceptDependencyTree(object):
+class ConceptDependencyGraph(object):
     def __init__(self):
         self.root = None
         self.children = defaultdict(list) # edges go from parent (e.g. prerequisite) to child
@@ -92,11 +93,8 @@ class ConceptDependencyTree(object):
             prereqs[p] = 1
         return prereqs
 
-
-
-concept_dep_tree = ConceptDependencyTree()
+concept_dep_tree = ConceptDependencyGraph()
 concept_dep_tree.init_default_tree(n=N_CONCEPTS)
-
 
 class Exercise(object):
     def __init__(self, concepts=None):
@@ -114,7 +112,10 @@ class Exercise(object):
 
 
 class Student(object):
-    def __init__(self, initial_knowledge=None):
+
+    def __init__(self, p_trans_satisfied=0.5, p_trans_not_satisfied=0.0, initial_knowledge=None):
+        self.p_trans_satisfied = p_trans_satisfied
+        self.p_trans_not_satisfied = p_trans_not_satisfied
         if initial_knowledge != None:
             self.knowledge = initial_knowledge
         else:
@@ -126,16 +127,17 @@ class Student(object):
 
     def do_exercise(self, ex):
         '''
-        :param ex: an Exercise object
-        :return:
+        Simulates solving the provided exercise.
+        :param ex: an Exercise object.
+        :return: Returns 1 if student solved it correctly, 0 otherwise.
         '''
         if self._fulfilled_prereqs(ex):
-            if random.random() <= P_TRANS_SATISFIED:
+            if random.random() <= self.p_trans_satisfied:
                 for c in xrange(len(ex.concepts)):
                     if ex.concepts[c] == 1:
                         self.knowledge[c] = 1
         else:
-            return 1 if random.random() <= P_TRANS_NOT_SATISFIED else 0
+            return 1 if random.random() <= self.p_trans_not_satisfied else 0
 
 
     def _fulfilled_prereqs(self, ex):
@@ -153,7 +155,7 @@ class Student(object):
         return True
 
 
-def generate_student_sample(seqlen=1000, exercise_seq=None, initial_knowledge=None, verbose=True):
+def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=None, verbose=True):
     '''
 
     :param seqlen: number of exercises the student will do.
