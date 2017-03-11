@@ -19,7 +19,8 @@
 
 import numpy as np
 import random
-from collections import defaultdict, deque
+import pickle
+from collections import defaultdict, deque, Counter
 
 
 # Params / Constants
@@ -132,10 +133,14 @@ class Student(object):
         :return: Returns 1 if student solved it correctly, 0 otherwise.
         '''
         if self._fulfilled_prereqs(ex):
-            if random.random() <= self.p_trans_satisfied:
+            # print("P trans satisfied_{}".format(self.p_trans_satisfied))
+            if np.random.random() <= self.p_trans_satisfied:
                 for c in xrange(len(ex.concepts)):
                     if ex.concepts[c] == 1:
                         self.knowledge[c] = 1
+                return 1
+            else:
+                return 0
         else:
             return 1 if random.random() <= self.p_trans_not_satisfied else 0
 
@@ -167,30 +172,60 @@ def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=Non
 
     initial_knowledge = np.zeros((N_CONCEPTS,))
     initial_knowledge[0] = 1
-    s = Student(initial_knowledge)
+    s = Student(initial_knowledge=initial_knowledge)
 
     if not exercise_seq:
         exercise_seq = []
         for i in xrange(seqlen):
             concepts = np.zeros((N_CONCEPTS,))
-            # concepts[random.randint(0, N_CONCEPTS - 1)] = 1
             concepts[i % N_CONCEPTS] = 1
             ex = Exercise(concepts=concepts)
             exercise_seq.append(ex)
 
+    # Go through sequence of exercises and record whether student solved each or not
+    student_performance = []
+    n_exercises_to_mastery = -1
     for i, ex in enumerate(exercise_seq):
-        s.do_exercise(ex)
-        print s.knowledge
+        result = s.do_exercise(ex)
+        student_performance.append(result)
+        # print s.knowledge
         if np.sum(s.knowledge) == N_CONCEPTS:
-            if verbose:
-                print "learned all concepts after {} exercises.".format(i)
+            # if verbose and n_exercises_to_mastery == -1:
+            n_exercises_to_mastery = i + 1
             break
+    # print exercise_seq
+    print student_performance
+    if n_exercises_to_mastery != -1:
+        print "learned all concepts after {} exercises.".format(n_exercises_to_mastery)
+        student_sample = zip(exercise_seq[:n_exercises_to_mastery], student_performance)
+    else:
+        print ("Did not learn all concepts after doing {} exercises.".format(len(exercise_seq)))
+        student_sample = zip(exercise_seq, student_performance)
+
+    return student_sample
 
 
-def generate_data(n_students=1000, seqlen=50):
+
+def generate_data(n_students=100, seqlen=100, filename=None):
     # generate sequences for n_students
     # each sequence of length
-    pass
+    # if save_to
+    data = []
+
+    print ("Generating data for {} students, with max sequence length {}.".format(n_students, seqlen))
+    for i in xrange(n_students):
+        student_sample = generate_student_sample(seqlen=seqlen, exercise_seq=None, initial_knowledge=None, verbose=True)
+        data.append(student_sample)
+    if filename:
+        pickle.dump(data, open(filename, 'wb+'))
+    # print data
+    return data
+
+def load_data(filename="synthetic_data/toy_small.pickle"):
+    data = pickle.load(open(filename, 'rb+'))
+    print len(data)
+    # print data[0]
+
 
 def main():
     # tree = ConceptDependencyTree()
@@ -198,7 +233,11 @@ def main():
     # print tree.children
     # print tree.parents
     # print tree.prereq_map
-    generate_student_sample()
+
+    # generate_student_sample()
+
+    # generate_data(n_students=1000, seqlen=50, filename="synthetic_data/1000_stud_max_50_ex.pickle")
+    load_data("synthetic_data/1000_stud_max_50_ex.pickle")
 
 if __name__ == "__main__":
     main()
