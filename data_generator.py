@@ -182,7 +182,7 @@ def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=Non
     :param policy: if no exercise_seq provided, use the specified policy to generate exercise sequence.
     :param verbose: if True, print out debugging / progress statements
     :return: array of tuples, where each tuple consists of
-    (Exercise object, 0 or 1 indicating success of student on that exercise, knowledge of student after doing exercise)
+    (exercise, 0 or 1 indicating success of student on that exercise, knowledge of student after doing exercise)
     Note that this array can have any length between 1 and seqlen, inclusive
     '''
 
@@ -211,8 +211,10 @@ def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=Non
     student_performance = []
     student_knowledge = []
     n_exercises_to_mastery = -1
+    exercises = [] # so we can store sequence of exercises as numpy arrays (instead of arrays of exercise objects)
     for i, ex in enumerate(exercise_seq):
         result = s.do_exercise(ex)
+        exercises.append(ex.concepts) # makes the assumption that an exercise is equivalent to the concepts it practices)
         student_performance.append(result)
         student_knowledge.append(s.knowledge)
         if np.sum(s.knowledge) == N_CONCEPTS:
@@ -221,13 +223,12 @@ def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=Non
             break
     # print exercise_seq
     print student_performance
-    if n_exercises_to_mastery != -1:
+    if verbose and n_exercises_to_mastery != -1:
         print "learned all concepts after {} exercises.".format(n_exercises_to_mastery)
-        student_sample = zip(exercise_seq[:n_exercises_to_mastery], student_performance, student_knowledge)
     else:
         print ("Did not learn all concepts after doing {} exercises.".format(len(exercise_seq)))
-        student_sample = zip(exercise_seq, student_performance, student_knowledge)
-
+    student_sample = zip(exercises, student_performance, student_knowledge)
+    print student_sample
     return student_sample
 
 
@@ -268,8 +269,8 @@ def main():
     # print tree.parents
     # print tree.prereq_map
     # generate_student_sample()
-    
-    # make_toy_data()
+
+    make_toy_data()
     load_toy_data()
 
 
