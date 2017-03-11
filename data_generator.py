@@ -13,9 +13,11 @@
 # Hence, s is a n-dim vector, where each index i corresponds to concept i.
 
 #===============================================================================
-# CURRENT STATUS: In progress
+# CURRENT STATUS: Working
 #===============================================================================
 # USAGE: from data_generator import *
+# generate_data(n_students=5, seqlen=50, policy='expert', filename="synthetic_data/toy_expert.pickle")
+
 
 import numpy as np
 import random
@@ -132,7 +134,7 @@ class Student(object):
         :param ex: an Exercise object.
         :return: Returns 1 if student solved it correctly, 0 otherwise.
         '''
-        if self._fulfilled_prereqs(ex):
+        if self._fulfilled_prereqs(ex.concepts):
             # print("P trans satisfied_{}".format(self.p_trans_satisfied))
             if np.random.random() <= self.p_trans_satisfied:
                 for c in xrange(len(ex.concepts)):
@@ -145,14 +147,15 @@ class Student(object):
             return 1 if random.random() <= self.p_trans_not_satisfied else 0
 
 
-    def _fulfilled_prereqs(self, ex):
+    def _fulfilled_prereqs(self, concepts):
         '''
         for each concept tested in the exercise, check if all prereqs are fulfilled.
         if prereqs for at least one concept are not fulfilled, then function returns False.
         :return: bool
         '''
-        for i in xrange(len(ex.concepts)):
-            c = ex.concepts[i]
+
+        for i in xrange(len(concepts)):
+            c = concepts[i]
             if c == 1:
                 prereqs = concept_dep_tree.get_prereqs(i)
                 if np.sum(np.multiply(self.knowledge, prereqs)) != np.sum(prereqs):
@@ -160,18 +163,28 @@ class Student(object):
         return True
 
 
-
-def _generate_student_sample_with_expert_policy(student, seqlen=100):
+def choose_next_exercise_with_expert_policy(student, verbose=False):
     """
-    TODO
+    Choose an exercise that the student has all the prerequisites for
     :param student:
-    :param seqlen:
-    :return:
+    :return: Exercise object
     """
-    pass
+    concepts = np.zeros((N_CONCEPTS,))
+    for i in xrange(N_CONCEPTS):
+        if not student.knowledge[i]:
+            # if student hasn't learned concept yet:
+            concepts[i] = 1
+            if student._fulfilled_prereqs(concepts):
+                # if verbose:
+                #     print "chose exercise with concept {}".format(i)
+                return Exercise(concepts=concepts)
+            else:
+                concepts[i] = 0
+    concepts[0] = 1
+    return Exercise(concepts=concepts)
 
 
-def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=None, policy=None, verbose=True):
+def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
     '''
 
     :param seqlen: number of exercises the student will do.
@@ -190,10 +203,10 @@ def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=Non
     initial_knowledge[0] = 1
     s = Student(initial_knowledge=initial_knowledge)
 
-    if not exercise_seq and policy == 'expert':
-        return _generate_student_sample_with_expert_policy(student=s, seqlen=seqlen)
+    # if not exercise_seq and policy == 'expert':
+    #     return _generate_student_sample_with_expert_policy(student=s, seqlen=seqlen, verbose=verbose)
 
-    if not exercise_seq:
+    if not exercise_seq and policy != 'expert':
         # for expert policy, we have to choose the next exercise online.
         exercise_seq = []
         for i in xrange(seqlen):
@@ -212,7 +225,11 @@ def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=Non
     student_knowledge = []
     n_exercises_to_mastery = -1
     exercises = [] # so we can store sequence of exercises as numpy arrays (instead of arrays of exercise objects)
-    for i, ex in enumerate(exercise_seq):
+    for i in xrange(seqlen):
+        if policy == 'expert':
+            ex = choose_next_exercise_with_expert_policy(s, verbose=verbose)
+        else:
+            ex = exercise_seq[i]
         result = s.do_exercise(ex)
         exercises.append(ex.concepts) # makes the assumption that an exercise is equivalent to the concepts it practices)
         student_performance.append(result)
@@ -221,32 +238,38 @@ def generate_student_sample(seqlen=100, exercise_seq=None, initial_knowledge=Non
             # if verbose and n_exercises_to_mastery == -1:
             n_exercises_to_mastery = i + 1
             break
-    # print exercise_seq
-    print student_performance
-    if verbose and n_exercises_to_mastery != -1:
-        print "learned all concepts after {} exercises.".format(n_exercises_to_mastery)
-    else:
-        print ("Did not learn all concepts after doing {} exercises.".format(len(exercise_seq)))
+    # print exercises
+    if verbose:
+        if n_exercises_to_mastery != -1:
+            print "learned all concepts after {} exercises.".format(n_exercises_to_mastery)
+        else:
+            print ("Did not learn all concepts after doing {} exercises.".format(seqlen))
     student_sample = zip(exercises, student_performance, student_knowledge)
-    print student_sample
     return student_sample
 
 
-
-def generate_data(n_students=100, seqlen=100, policy='modulo', filename=None):
-    # generate sequences for n_students
-    # each sequence of length
-    # if save_to
+def generate_data(n_students=100, seqlen=100, policy='modulo', filename=None, verbose=False):
+    """
+    :param n_students: number of students / samples to generate data for
+    :param seqlen: max length of exercises for a student. if student learns all concepts, sequence can be shorter.
+    :param policy: which policy to use to generate data. can be 'expert', 'modulo', 'random'
+    :param filename: where to store the generated data. If None, will not save to file.
+    :param verbose: if True, prints debugging statements
+    :return:
+    """
     data = []
     print ("Generating data for {} students, with max sequence length {}.".format(n_students, seqlen))
     for i in xrange(n_students):
+        if verbose:
+            print ("Creating sample for {}th student".format(i))
         student_sample = generate_student_sample(seqlen=seqlen, exercise_seq=None, initial_knowledge=None,
-                                                 policy=policy, verbose=True)
+                                                 policy=policy, verbose=verbose)
         data.append(student_sample)
     if filename:
         pickle.dump(data, open(filename, 'wb+'))
     # print data
     return data
+
 
 def load_data(filename=None):
     data = pickle.load(open(filename, 'rb+'))
@@ -268,7 +291,12 @@ def main():
     # print tree.children
     # print tree.parents
     # print tree.prereq_map
-    # generate_student_sample()
+    print ("Generate one sample using expert policy. ")
+    generate_student_sample(policy='expert', verbose=True)
+    print ("Generate one sample using random policy. ")
+    generate_student_sample(policy='random', verbose=True)
+    print ("Generate one sample using modulo policy. ")
+    generate_student_sample(policy='modulo', verbose=True)
 
     make_toy_data()
     load_toy_data()
