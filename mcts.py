@@ -16,7 +16,7 @@ import scikit.mcts as search
 class StudentSim(object):
     '''
     A model-based simulator for a student. Maintains its own internal hidden state.
-    TODO implement
+    This is just a template.
     '''
 
     def __init__(self, data):
@@ -69,6 +69,9 @@ class StudentState(object):
         pass
     
     def perform(self, action):
+        pass
+    
+    def real_world_perform(self, action):
         pass
     
     def reward(self, parent, action):
