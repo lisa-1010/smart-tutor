@@ -36,6 +36,7 @@ def preprocess_data_for_rnn(data):
     n_inputdim = 2 * n_concepts
     n_exercises = n_concepts
     n_outputdim = n_exercises
+
     input_data = np.zeros((n_students, n_timesteps, n_inputdim))
     output_mask = np.zeros((n_students, n_timesteps, n_outputdim))
     target_data = np.zeros((n_students, n_timesteps, n_outputdim))

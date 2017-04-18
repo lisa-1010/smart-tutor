@@ -363,7 +363,7 @@ def init_synthetic_data():
     print ("Data generation completed. ")
 
 if __name__ == "__main__":
-    main_test()
-    # init_synthetic_data()
+    # main_test()
+    init_synthetic_data()
 
 
