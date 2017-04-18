@@ -1,5 +1,5 @@
 from __future__ import division
-from graph import StateNode, ActionNode
+from mctslib.graph import StateNode, ActionNode
 
 
 class Bellman(object):
