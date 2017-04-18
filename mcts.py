@@ -13,6 +13,13 @@ import scipy as sp
 
 import data_generator as dg
 
+from mctslib.graph import StateNode
+from mctslib.mcts import *
+
+import mctslib.tree_policies as tree_policies
+import mctslib.default_policies as default_policies
+import mctslib.backups as backups
+
 class StudentSim(object):
     '''
     A model-based simulator for a student. Maintains its own internal hidden state.
@@ -50,8 +57,9 @@ class StudentAction(object):
     '''
     Represents an action of the tutor in MCTS i.e. a problem to give to the student.
     '''
-    def __init__(self, concept):
+    def __init__(self, concept, conceptvec):
         self.concept = concept
+        self.conceptvec = conceptvec
     
     def __eq__(self, other):
         return self.concept == other.concept
@@ -67,9 +75,19 @@ class StudentState(object):
     def __init__(self, student):
         # student, history of exercises, history of obs
         self.belief = [student, [], []]
+        self.actions = []
+        for i in range(dg.N_CONCEPTS):
+            concepts = np.zeros((dg.N_CONCEPTS,))
+            concepts[i] = 1
+            self.actions.append(StudentAction(i, concepts))
     
     def perform(self, action):
-        ex = dg.Exercise(concept=action.concept)
+        # create exercise
+        concepts = np.zeros((dg.N_CONCEPTS,))
+        concepts[action.concept] = 1
+        ex = dg.Exercise(concepts=concepts)
+        
+        # advance the simulator
         old_knowledge = self.belief[0].knowledge
         result = self.belief[0].do_exercise(ex)
         new_knowledge = self.belief[0].knowledge
@@ -89,27 +107,12 @@ class StudentState(object):
         return new_state
     
     def real_world_perform(self, action):
-        ex = dg.Exercise(concept=action.concept)
-        old_knowledge = self.belief[0].knowledge
-        result = self.belief[0].do_exercise(ex)
-        new_knowledge = self.belief[0].knowledge
-        self.belief[0].knowledge = old_knowledge # revert back current sim
-        
-        # update history for the new state
-        new_exes = self.belief[1] + [action.concept]
-        new_obs = self.belief[2] + [result]
-        
-        # create and update knowledge of simulator and history of new state
-        new_student = dg.Student()
-        new_student.knowledge = new_knowledge
-        new_state = StudentState(new_student)
-        new_state.belief[1] = new_exes
-        new_state.belief[2] = new_obs
-        
-        return new_state
+        return self.perform(action)
     
     def reward(self, parent, action):
-        pass
+        # for now, just use the real knowledge state
+        #print(self.belief[0].knowledge)
+        return np.sum(self.belief[0].knowledge)
     
     def is_terminal(self):
         return False
@@ -122,13 +125,38 @@ class StudentState(object):
     def __hash__(self):
         # take a shortcut and only compare last concept and last observation
         # because this is only used for storing a dictionary of immediate children (double check this)
-        return new_state.belief[1][-1]*10 + new_state.belief[2]
+        return int(self.belief[1][-1]*10 + self.belief[2][-1])
+    
+    def __str__(self):
+        return str(self.belief)
 
-def main():
-    pass
+        
+def test_student_sim():
+    horizon = 20
+    nrollouts = 10
+    
+    random.seed()
+    
+    rollout_policy = default_policies.immediate_reward
+    #rollout_policy = default_policies.RandomKStepRollOut(10)
+    uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
+               backups.Bellman(0.95))
+    
+    root = StateNode(None, StudentState(dg.Student()))
+    for i in range(horizon):
+        print('Step {}'.format(i))
+        best_action = uct(root, n=nrollouts)
+        print('Current state: {}'.format(str(root.state)))
+        print(best_action)
+        
+        # act in the real environment
+        new_root = root.children[best_action].sample_state(real_world=True)
+        new_root.parent = None # cutoff the rest of the tree
+        root = new_root
+        print('Next state: {}'.format(str(new_root.state)))
 
 
 if __name__ == '__main__':
-    main()
+    test_student_sim()
 
 

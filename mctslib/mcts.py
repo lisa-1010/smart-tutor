@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import random
-import utils
+import mctslib.utils as utils
 
 
 class MCTS(object):
