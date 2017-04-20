@@ -11,6 +11,7 @@
 import numpy as np
 import scipy as sp
 
+import constants
 import data_generator as dg
 
 from mctslib.graph import StateNode
@@ -88,7 +89,7 @@ class StudentState(object):
         ex = dg.Exercise(concepts=concepts)
         
         # advance the simulator
-        old_knowledge = self.belief[0].knowledge
+        old_knowledge = np.copy(self.belief[0].knowledge)
         result = self.belief[0].do_exercise(ex)
         new_knowledge = self.belief[0].knowledge
         self.belief[0].knowledge = old_knowledge # revert back current sim
@@ -111,15 +112,15 @@ class StudentState(object):
     
     def reward(self, parent, action):
         # for now, just use the real knowledge state
-        #print(self.belief[0].knowledge)
+        print('{} {}'.format(self.belief[0].knowledge, action.concept))
         return np.sum(self.belief[0].knowledge)
     
     def is_terminal(self):
         return False
     
     def __eq__(self, other):
-        val = (self.belief[0].knowledge, self.belief[1], self.belief[2])
-        oval = (other.belief[0].knowledge, other.belief[1], other.belief[2])
+        val = (list(self.belief[0].knowledge), self.belief[1], self.belief[2])
+        oval = (list(other.belief[0].knowledge), other.belief[1], other.belief[2])
         return val == oval
     
     def __hash__(self):
@@ -128,12 +129,12 @@ class StudentState(object):
         return int(self.belief[1][-1]*10 + self.belief[2][-1])
     
     def __str__(self):
-        return str(self.belief)
+        return 'EX: {} C: {} K: {}'.format(self.belief[1],self.belief[2],self.belief[0].knowledge)
 
         
 def test_student_sim():
-    horizon = 20
-    nrollouts = 10
+    horizon = 4
+    nrollouts = 50
     
     random.seed()
     
@@ -147,7 +148,7 @@ def test_student_sim():
         print('Step {}'.format(i))
         best_action = uct(root, n=nrollouts)
         print('Current state: {}'.format(str(root.state)))
-        print(best_action)
+        #print(best_action)
         
         # act in the real environment
         new_root = root.children[best_action].sample_state(real_world=True)
