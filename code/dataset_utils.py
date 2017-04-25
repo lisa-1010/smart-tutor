@@ -6,8 +6,6 @@
 # DESCRIPTION:
 # To handle data loading, and offline dataset creation to train dynamics
 # models.
-# Vaguely following Deepmind's Sonnet examples.
-# https://github.com/deepmind/sonnet/blob/master/sonnet/examples/dataset_shakespeare.py
 #===============================================================================
 # CURRENT STATUS: In progress, working
 #===============================================================================
