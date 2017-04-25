@@ -33,75 +33,12 @@ from collections import defaultdict, deque, Counter
 # Custom Modules
 from filepaths import *
 from constants import *
-from concept_dependency_graph import *
-
 import dataset_utils
 
-
-
-class Exercise(object):
-    def __init__(self, concepts=0):
-        '''
-        :param concepts: a binary np.array encoding the concepts practiced by this exercise.
-        Could be one-hot for simple model, so each exercise practices exactly one concept.
-        '''
-        # if concepts is None, a random concept is chosen.
-        if np.sum(concepts) != 0:
-            self.concepts = concepts
-        else:
-            # create a one hot vector for concepts
-            self.concepts = np.zeros((N_CONCEPTS,))
-            self.concepts[random.randint(0, N_CONCEPTS - 1)] = 1
-
-
-class Student(object):
-
-    def __init__(self, p_trans_satisfied=0.5, p_trans_not_satisfied=0.0, initial_knowledge=0):
-        self.p_trans_satisfied = p_trans_satisfied
-        self.p_trans_not_satisfied = p_trans_not_satisfied
-        if np.sum(initial_knowledge) != 0:
-            self.knowledge = initial_knowledge
-        else:
-            self.knowledge = np.zeros((N_CONCEPTS,))
-
-        # other potential member variables
-        # self.motivation = 1
-
-
-    def do_exercise(self, concept_tree, ex):
-        '''
-        Simulates solving the provided exercise.
-        :param ex: an Exercise object.
-        :return: Returns 1 if student solved it correctly, 0 otherwise.
-        '''
-        # if self._fulfilled_prereqs(ex.concepts):
-        if fulfilled_prereqs(concept_tree, self.knowledge, ex.concepts):
-            # print("P trans satisfied_{}".format(self.p_trans_satisfied))
-            if np.random.random() <= self.p_trans_satisfied:
-                for c in xrange(len(ex.concepts)):
-                    if ex.concepts[c] == 1:
-                        self.knowledge[c] = 1
-                return 1
-            else:
-                return 0
-        else:
-            return 1 if random.random() <= self.p_trans_not_satisfied else 0
-
-
-    # def _fulfilled_prereqs(self, concepts):
-    #     '''
-    #     for each concept tested in the exercise, check if all prereqs are fulfilled.
-    #     if prereqs for at least one concept are not fulfilled, then function returns False.
-    #     :return: bool
-    #     '''
-    #
-    #     for i in xrange(len(concepts)):
-    #         c = concepts[i]
-    #         if c == 1:
-    #             prereqs = concept_tree.get_prereqs(i)
-    #             if np.sum(np.multiply(self.knowledge, prereqs)) != np.sum(prereqs):
-    #                 return False
-    #     return True
+# Import custom classes
+from concept_dependency_graph import *
+from student import *
+from exercise import *
 
 
 def fulfilled_prereqs(concept_tree, knowledge, concepts):
@@ -118,7 +55,6 @@ def fulfilled_prereqs(concept_tree, knowledge, concepts):
             if np.sum(np.multiply(knowledge, prereqs)) != np.sum(prereqs):
                 return False
     return True
-
 
 
 def choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=False):
