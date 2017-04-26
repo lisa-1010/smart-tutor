@@ -1,14 +1,13 @@
-#dynamics_model.py
+# dynamics_model.py
 # @author: Lisa Wang
 # @created: Apr 9 2017
 #
 #===============================================================================
 # DESCRIPTION:
-# exports dynamics model class, allows training and predicts next observation
-#
-
+# exports functions to create an RNN model for simulating the dynamics.
+# This code has been packaged into a class, see dynamics_model_class.py
 #===============================================================================
-# CURRENT STATUS: In progress
+# CURRENT STATUS: Working
 #===============================================================================
 # USAGE: from dynamics_model import *
 
@@ -27,11 +26,11 @@ import utils
 
 FLAGS = tf.flags.FLAGS
 
-
 n_timesteps = 10
 n_inputdim = 20
 n_hidden = 32
 n_outputdim = 10
+
 
 
 def load_model(model_id, timesteps=None, load_checkpoint=False, is_training=False):
@@ -100,43 +99,3 @@ def predict(model, input_data):
     output_mask = np.ones((n_samples, n_timesteps, n_outputdim))
     tf.reset_default_graph()
     return model.predict([input_data, output_mask])
-
-
-#
-# Once RNN is tested, package it into a class.
-# class RNNDynamicsModel(object):
-#     def __init__(self, load_from_ckpt=True):
-#         self.model = snt.VanillaRNN(128, )
-#         pass
-#
-#
-#     def train_model_with_offline_data(self, data):
-#         pass
-#
-#
-#     def predict_next_observation(self, history_observations):
-#         pass
-
-# tf.flags.DEFINE_integer("num_training_iterations", 1000,
-#                         "Number of iterations to train for.")
-# tf.flags.DEFINE_integer("report_interval", 100,
-#                         "Iterations between reports (samples, valid loss).")
-# tf.flags.DEFINE_integer("reduce_learning_rate_interval", 1000,
-#                         "Iterations between learning rate reductions.")
-# tf.flags.DEFINE_integer("lstm_depth", 2, "Number of LSTM layers.")
-# tf.flags.DEFINE_integer("batch_size", 32, "Batch size for training.")
-# tf.flags.DEFINE_integer("n_hidden", 128, "Size of LSTM hidden layer.")
-# tf.flags.DEFINE_integer("truncation_length", 64, "Sequence size for training.")
-# tf.flags.DEFINE_integer("sample_length", 1000, "Sequence size for sampling.")
-# tf.flags.DEFINE_float("max_grad_norm", 5, "Gradient clipping norm limit.")
-# tf.flags.DEFINE_float("learning_rate", 0.1, "Optimizer learning rate.")
-# tf.flags.DEFINE_float("reduce_learning_rate_multiplier", 0.1,
-#                       "Learning rate is multiplied by this when reduced.")
-# tf.flags.DEFINE_float("optimizer_epsilon", 0.01,
-#                       "Epsilon used for Adam optimizer.")
-# tf.flags.DEFINE_string("checkpoint_dir", "../rnn_ckpts/",
-#                        "Checkpointing directory.")
-# tf.flags.DEFINE_integer("checkpoint_interval", 500,
-#                         "Checkpointing step interval.")
-# if __name__ == "__main__":
-#   tf.app.run()
