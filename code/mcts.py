@@ -13,6 +13,8 @@ import scipy as sp
 
 import constants
 import data_generator as dg
+import student as st
+import exercise as exer
 
 from mctslib.graph import StateNode
 from mctslib.mcts import *
@@ -77,16 +79,16 @@ class StudentState(object):
         # student, history of exercises, history of obs
         self.belief = [student, [], []]
         self.actions = []
-        for i in range(dg.N_CONCEPTS):
-            concepts = np.zeros((dg.N_CONCEPTS,))
+        for i in range(constants.N_CONCEPTS):
+            concepts = np.zeros((constants.N_CONCEPTS,))
             concepts[i] = 1
             self.actions.append(StudentAction(i, concepts))
     
     def perform(self, action):
         # create exercise
-        concepts = np.zeros((dg.N_CONCEPTS,))
+        concepts = np.zeros((constants.N_CONCEPTS,))
         concepts[action.concept] = 1
-        ex = dg.Exercise(concepts=concepts)
+        ex = exer.Exercise(concepts=concepts)
         
         # advance the simulator
         old_knowledge = np.copy(self.belief[0].knowledge)
@@ -99,7 +101,7 @@ class StudentState(object):
         new_obs = self.belief[2] + [result]
         
         # create and update knowledge of simulator and history of new state
-        new_student = dg.Student()
+        new_student = st.Student()
         new_student.knowledge = new_knowledge
         new_state = StudentState(new_student)
         new_state.belief[1] = new_exes
@@ -143,7 +145,7 @@ def test_student_sim():
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.Bellman(0.95))
     
-    root = StateNode(None, StudentState(dg.Student()))
+    root = StateNode(None, StudentState(st.Student()))
     for i in range(horizon):
         print('Step {}'.format(i))
         best_action = uct(root, n=nrollouts)
