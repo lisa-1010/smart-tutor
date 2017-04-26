@@ -21,6 +21,8 @@ import pickle
 import numpy as np
 import tensorflow as tf
 
+from mcts import StudentAction
+
 def load_data(filename=None):
     data = pickle.load(open(filename, 'rb+'))
     return data
@@ -58,3 +60,14 @@ def preprocess_data_for_rnn(data):
             target_data[i,t,next_exer_ix] = next_perf
 
     return input_data, output_mask, target_data
+
+
+def convert_to_rnn_input(action, observation):
+    concept_vec = action.conceptvec
+    input = np.zeros(2  * len(concept_vec))
+    if observation == 1: # if student solved
+        input[:len(concept_vec)] = concept_vec
+    else:
+        input[len(concept_vec):] = concept_vec
+    return input
+

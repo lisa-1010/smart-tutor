@@ -22,24 +22,25 @@ import tflearn
 import numpy as np
 
 import utils
+import dataset_utils as d_utils
 
 FLAGS = tf.flags.FLAGS
 
-n_timesteps = 10
+# n_timesteps = 10
 n_inputdim = 20
 n_hidden = 32
 n_outputdim = 10
 
 
 class DynamicsModel(object):
-    def __init__(self, model_id, timesteps=None, load_checkpoint=False):
+    def __init__(self, model_id, timesteps=10, load_checkpoint=False):
         print('Loading RNN dynamics model...')
 
         # if timesteps:
         #     # if provided as an argument, overwrite n_timesteps from the model
         #     n_timesteps = timesteps
         tf.reset_default_graph()
-        self.net = self._build_regression_lstm_net(n_timesteps=n_timesteps, n_inputdim=n_inputdim, n_hidden=n_hidden,
+        self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                          n_outputdim=n_outputdim)
 
         tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
@@ -65,19 +66,19 @@ class DynamicsModel(object):
         print('Model loaded.')
 
 
-    def _build_regression_lstm_net(self, n_timesteps=n_timesteps, n_inputdim=n_inputdim, n_hidden=n_hidden,
+    def _build_regression_lstm_net(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
-        net = tflearn.lstm(net, n_hidden, return_seq=True, name="lstm_1")
-        net = tflearn.lstm(net, n_outputdim, return_seq=True, name="lstm_2")
+        net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, name="lstm_1")
+        net, hidden_states_2 = tflearn.lstm(net, n_outputdim, return_seq=True, return_state=True, name="lstm_2")
         net = tf.stack(net, axis=1)
         net = tf.sigmoid(net) # to make sure that predictions are between 0 and 1.
         preds = net
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
                                  loss='mean_square')
-        return net
+        return net, hidden_states_1, hidden_states_2
 
 
     def train(self, train_data, load_checkpoint=True):
@@ -93,6 +94,56 @@ class DynamicsModel(object):
         output_mask = np.ones((n_samples, n_timesteps, n_outputdim))
         tf.reset_default_graph()
         return self.model.predict([input_data, output_mask])
+
+
+class RnnStudentSim(object):
+    '''
+    A model-based simulator for a student. Maintains its own internal hidden state.
+    This is just a template.
+    '''
+
+    def __init__(self, data, model_id, seq_max_len=10):
+        # what is data here?
+        # Can I add more arguments?
+        self.model = DynamicsModel(model_id=model_id, timesteps=1, load_checkpoint=False)
+        # set initial_state to random?
+        self.seq_max_len = seq_max_len
+        self.sequence = [] # will store up to seq_max_len
+        pass
+
+    def sample_observation(self, action):
+        '''
+        Samples a new observation given an action.
+        '''
+        pass
+
+    def sample_reward(self, action):
+        '''
+        Samples a new reward given an action.
+        '''
+        pass
+
+    def advance_simulator(self, action, observation):
+        '''
+        Given next action and observation, advance the internal hidden state of the simulator.
+        Question: Is action here a StudentAction object?
+        '''
+        input = d_utils.convert_to_rnn_input(action, observation)
+        if len(self.sequence == self.seq_max_len):
+            self.sequence = self.sequence[1:] + [input]
+        else:
+            self.sequence.append(input)
+        pred = self.model.predict(np.array(self.sequence))
+        new_pred = pred[:,-1,:]
+        new_observ = np.argmax(new_pred, axis=1)
+        return new_observ
+
+    def copy(self):
+        '''
+        Make a copy of the current simulator.
+        '''
+        pass
+
 
 
 #
