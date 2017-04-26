@@ -39,7 +39,7 @@ class DynamicsModel(object):
         #     # if provided as an argument, overwrite n_timesteps from the model
         #     n_timesteps = timesteps
         tf.reset_default_graph()
-        self.net = _build_regression_lstm_net(n_timesteps=n_timesteps, n_inputdim=n_inputdim, n_hidden=n_hidden,
+        self.net = self._build_regression_lstm_net(n_timesteps=n_timesteps, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                          n_outputdim=n_outputdim)
 
         tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
@@ -51,7 +51,7 @@ class DynamicsModel(object):
         utils.check_if_path_exists_or_create(tensorboard_dir)
         utils.check_if_path_exists_or_create(checkpoint_path)
 
-        self.model = tflearn.DNN(net, tensorboard_verbose=2, tensorboard_dir=tensorboard_dir, \
+        self.model = tflearn.DNN(self.net, tensorboard_verbose=2, tensorboard_dir=tensorboard_dir, \
                                 checkpoint_path=checkpoint_path, max_checkpoints=3)
 
         if load_checkpoint:
@@ -72,6 +72,7 @@ class DynamicsModel(object):
         net = tflearn.lstm(net, n_hidden, return_seq=True, name="lstm_1")
         net = tflearn.lstm(net, n_outputdim, return_seq=True, name="lstm_2")
         net = tf.stack(net, axis=1)
+        net = tf.sigmoid(net) # to make sure that predictions are between 0 and 1.
         preds = net
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
