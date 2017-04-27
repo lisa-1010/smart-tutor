@@ -160,5 +160,6 @@ class RnnStudentSim(object):
         '''
         sim_copy = RnnStudentSim()
         sim_copy.model = self.model
+        sim_copy.seq_max_len = self.seq_max_len
         sim_copy.sequence = self.sequence[:] # deep copy
         return sim_copy
