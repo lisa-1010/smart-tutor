@@ -4,6 +4,15 @@
 #
 #===============================================================================
 # DESCRIPTION:
+# This module defines the student model used by the data generator / simulator.
+# This object keeps track of a student's knowledge (latent state)
+# The student model is defined by three probabilities:
+#       - p_trans_satisfied: probability of learning a new concept given that
+#           all prequisite concepts have been learned/satisfied
+#       - p_trans_not_satisfied: probability of learnign a new concept given
+#           that not all prerequisite concepts have been learned
+#       - p_get_exercise_correct_if_concepts_learned: probability of getting an
+#           exercise correct if all concepts it tests have been learned by the student.
 #
 #===============================================================================
 # CURRENT STATUS: Working
@@ -22,16 +31,14 @@ from constants import *
 
 
 class Student(object):
-    def __init__(self, p_trans_satisfied=0.5, p_trans_not_satisfied=0.0, initial_knowledge=0):
+    def __init__(self, p_trans_satisfied=0.5, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=0.9, initial_knowledge=0):
         self.p_trans_satisfied = p_trans_satisfied
         self.p_trans_not_satisfied = p_trans_not_satisfied
+        self.p_get_ex_correct_if_concepts_learned = p_get_ex_correct_if_concepts_learned
         if np.sum(initial_knowledge) != 0:
             self.knowledge = initial_knowledge
         else:
             self.knowledge = np.zeros((N_CONCEPTS,))
-
-        # other potential member variables
-        # self.motivation = 1
 
 
     def do_exercise(self, concept_tree, ex):
@@ -43,10 +50,11 @@ class Student(object):
         # if self._fulfilled_prereqs(ex.concepts):
         if self.fulfilled_prereqs(concept_tree, ex.concepts):
             # print("P trans satisfied_{}".format(self.p_trans_satisfied))
-            if np.random.random() <= self.p_trans_satisfied:
-                for c in xrange(len(ex.concepts)):
-                    if ex.concepts[c] == 1:
-                        self.knowledge[c] = 1
+            for c in xrange(len(ex.concepts)):
+                if ex.concepts[c] == 1 and np.random.random() <= self.p_trans_satisfied:
+                    # update latent knowledge state
+                    self.knowledge[c] = 1
+            if self.learned_all_concepts_in_ex(ex.concepts) and np.random.random() <= self.p_get_ex_correct_if_concepts_learned:
                 return 1
             else:
                 return 0
@@ -68,4 +76,10 @@ class Student(object):
                     return False
         return True
 
-# END OF class Student
+    def learned_all_concepts_in_ex(self, concepts):
+        for c in xrange(len(concepts)):
+            if concepts[c] == 1 and self.knowledge[c] == 0:
+                return False
+        return True
+
+    # END OF class Student
