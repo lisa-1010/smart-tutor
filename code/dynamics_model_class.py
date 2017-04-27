@@ -33,6 +33,7 @@ n_outputdim = 10
 
 
 class DynamicsModel(object):
+
     def __init__(self, model_id, timesteps=10, load_checkpoint=False):
         print('Loading RNN dynamics model...')
 
@@ -102,25 +103,42 @@ class RnnStudentSim(object):
     This is just a template.
     '''
 
-    def __init__(self, data, model_id, seq_max_len=10):
+    def __init__(self, data, model_id=None, seq_max_len=10):
         # what is data here?
         # Can I add more arguments?
-        self.model = DynamicsModel(model_id=model_id, timesteps=1, load_checkpoint=False)
+        if model_id:
+            self.model = DynamicsModel(model_id=model_id, timesteps=1, load_checkpoint=False)
+        else:
+            self.model = None
         # set initial_state to random?
         self.seq_max_len = seq_max_len
         self.sequence = [] # will store up to seq_max_len
         pass
 
+
     def sample_observation(self, action):
-        '''
+        """
         Samples a new observation given an action.
-        '''
-        pass
+        :param action: of class StudentAction
+        :return:
+        """
+        # turns the list of input vectors, into a numpy matrix of shape (1, n_timesteps, 2*n_concepts)
+        # We need the first dimension since the network expects a batch.
+        rnn_input_sequence = np.expand_dims(np.array(self.sequence), axis=0)
+        pred = self.model.predict(rnn_input_sequence)
+
+        prob_success_action = pred[:, -1, action.concept] # action.concept is an index
+        # index into new_pred using action and return single probability
+        # observation is a probability
+        # return new_observ
+
 
     def sample_reward(self, action):
-        '''
+        """
         Samples a new reward given an action.
-        '''
+        :param action: of class StudentAction
+        :return:
+        """
         pass
 
     def advance_simulator(self, action, observation):
@@ -133,30 +151,14 @@ class RnnStudentSim(object):
             self.sequence = self.sequence[1:] + [input]
         else:
             self.sequence.append(input)
-        pred = self.model.predict(np.array(self.sequence))
-        new_pred = pred[:,-1,:]
-        new_observ = np.argmax(new_pred, axis=1)
-        return new_observ
+
 
     def copy(self):
         '''
         Make a copy of the current simulator.
+
         '''
-        pass
-
-
-
-#
-# Once RNN is tested, package it into a class.
-# class RNNDynamicsModel(object):
-#     def __init__(self, load_from_ckpt=True):
-#         self.model = snt.VanillaRNN(128, )
-#         pass
-#
-#
-#     def train_model_with_offline_data(self, data):
-#         pass
-#
-#
-#     def predict_next_observation(self, history_observations):
-#         pass
+        sim_copy = RnnStudentSim()
+        sim_copy.model = self.model
+        sim_copy.sequence = self.sequence[:] # deep copy
+        return sim_copy
