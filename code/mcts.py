@@ -5,16 +5,19 @@
 #===============================================================================
 
 #===============================================================================
-# CURRENT STATUS: Barely starting
+# CURRENT STATUS: Needs to be updated with the new Student with separate dependency graph.
 #===============================================================================
 
 import numpy as np
 import scipy as sp
 
+import copy
+
 import constants
 import data_generator as dg
 import student as st
 import exercise as exer
+import dynamics_model_class as dmc
 
 from mctslib.graph import StateNode
 from mctslib.mcts import *
@@ -56,6 +59,36 @@ class StudentSim(object):
         '''
         pass
 
+class StudentExactSim(object):
+    '''
+    A model-based simulator for a student. Maintains its own internal hidden state. This wraps around the true simulator.
+    '''
+
+    def __init__(self, student, dgraph):
+        self.student = student
+        self.dgraph = dgraph
+    
+    def advance_simulator(self, action):
+        '''
+        Given next action, simulate the student.
+        :param action: StudentAction object
+        :return: an observation and reward
+        '''
+        # for now, the reward is the actual student knowledge
+        reward = self.student.knowledge[action.concept]
+        ob = self.student.do_exercise(self.dgraph, exer.Exercise(action.conceptvec))
+        return (ob, reward)
+    
+    def copy(self):
+        '''
+        Make a copy of the current simulator.
+        '''
+        new_copy = copy.copy(self)
+        # now deepcopy the knowledge of the student
+        new_copy.student.knowledge = copy.copy(self.student.knowledge)
+        # everything else can be shallow copied
+        return new_copy
+
 class StudentAction(object):
     '''
     Represents an action of the tutor in MCTS i.e. a problem to give to the student.
@@ -70,10 +103,10 @@ class StudentAction(object):
     def __hash__(self):
         return self.concept
 
-class StudentState(object):
+class StudentExactState(object):
     '''
     The "state" to be used in MCTS. It actually represents a history of actions and observations since we are using POMDPs.
-    TODO implement
+    TODO: currently it's a strange mixture between an MDP and POMDP.
     '''
     def __init__(self, student):
         # student, history of exercises, history of obs
@@ -133,12 +166,71 @@ class StudentState(object):
     def __str__(self):
         return 'EX: {} C: {} K: {}'.format(self.belief[1],self.belief[2],self.belief[0].knowledge)
 
-        
+def DKTState(object):
+    '''
+    The belief state to be used in MCTS, implemented using a DKT.
+    TODO: needs to be updated when RnnStudentSim is updated
+    '''
+    def __init__(self, model, sim):
+        '''
+        :param model: RnnStudentSim object
+        :param sim: StudentExactSim object
+        '''
+        self.belief = model
+        # this sim should be shared between all DKTStates
+        # and it is advanced only when real_world_perform is called
+        # so all references to it will all be advanced
+        self.sim = sim
+    
+    def perform(self, action):
+        '''
+        Creates a new state where the DKT model is advanced.
+        Samples the observation from the DKT model.
+        '''
+        ob = self.belief.sample_observation(action)
+        new_model = self.belief.copy()
+        new_model.advance_simulator(action, ob)
+        return DKTState(new_model, self.sim)
+    
+    def real_world_perform(self, action):
+        '''
+        Advances the true student simulator.
+        Creates a new state where the DKT model is advanced according to the result of the true simulator.
+        '''
+        # advance the true student simulator
+        (ob, r) = self.sim.advance_simulator(action)
+        new_model = self.belief.copy()
+        new_model.advance_simulator(action, ob)
+        return DKTState(new_model, self.sim)
+    
+    def reward(self, parent, action):
+        pass
+    
+    def is_terminal(self):
+        pass
+    
+    def __eq__(self, other):
+        # compare the histories
+        return self.belief.sequence == other.belief.sequence
+    
+    def __hash__(self):
+        pass
+    
+    def __str__(self):
+        pass
+
+
 def test_student_sim():
+    '''
+    TODO needs updating
+    '''
     horizon = 4
     nrollouts = 50
     
     random.seed()
+    
+    concept_tree = ConceptDependencyGraph()
+    concept_tree.init_default_tree(n=5)
     
     rollout_policy = default_policies.immediate_reward
     #rollout_policy = default_policies.RandomKStepRollOut(10)
