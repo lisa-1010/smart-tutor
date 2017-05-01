@@ -43,6 +43,7 @@ class ConceptDependencyGraph(object):
         :return:
         '''
         # n: number of nodes
+        self.n = n
         assert (n > 0), "Tree must have at least one node."
         self.root = 0
         for i in xrange(0, n):
@@ -79,7 +80,7 @@ class ConceptDependencyGraph(object):
 
 
     def get_prereqs(self, concept):
-        prereqs = np.zeros((N_CONCEPTS,))
+        prereqs = np.zeros((self.n,))
         for p in self.prereq_map[concept]:
             prereqs[p] = 1
         return prereqs

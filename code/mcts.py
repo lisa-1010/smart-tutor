@@ -83,10 +83,10 @@ class StudentExactSim(object):
         '''
         Make a copy of the current simulator.
         '''
-        new_copy = copy.copy(self)
-        # now deepcopy the knowledge of the student
-        new_copy.student.knowledge = copy.copy(self.student.knowledge)
-        # everything else can be shallow copied
+        new_knowledge = np.copy(self.student.knowledge)
+        new_student = st.Student()
+        new_student.knowledge = new_knowledge
+        new_copy = StudentExactSim(new_student, self.dgraph)
         return new_copy
 
 class StudentAction(object):
@@ -105,66 +105,65 @@ class StudentAction(object):
 
 class StudentExactState(object):
     '''
-    The "state" to be used in MCTS. It actually represents a history of actions and observations since we are using POMDPs.
-    TODO: currently it's a strange mixture between an MDP and POMDP.
+    The "state" to be used in MCTS. We use the exact student knowledge as the state so this is an MDP
     '''
-    def __init__(self, student):
-        # student, history of exercises, history of obs
-        self.belief = [student, [], []]
+    def __init__(self, model, sim):
+        '''
+        :param model: StudentExactSim for the model
+        :param sim: StudentExactSim for the real world
+        '''
+        self.belief = None # not going to use belief at all because we know the exact state
+        self.model = model
+        self.sim = sim
+        self.n_concepts = model.student.knowledge.shape[0]
+        
         self.actions = []
-        for i in range(constants.N_CONCEPTS):
-            concepts = np.zeros((constants.N_CONCEPTS,))
+        for i in range(self.n_concepts):
+            concepts = np.zeros((self.n_concepts,))
             concepts[i] = 1
             self.actions.append(StudentAction(i, concepts))
     
     def perform(self, action):
-        # create exercise
-        concepts = np.zeros((constants.N_CONCEPTS,))
-        concepts[action.concept] = 1
-        ex = exer.Exercise(concepts=concepts)
+        # make a copy of the model
+        new_model = self.model.copy()
         
-        # advance the simulator
-        old_knowledge = np.copy(self.belief[0].knowledge)
-        result = self.belief[0].do_exercise(ex)
-        new_knowledge = self.belief[0].knowledge
-        self.belief[0].knowledge = old_knowledge # revert back current sim
+        # advance the new model
+        new_model.advance_simulator(action)
         
-        # update history for the new state
-        new_exes = self.belief[1] + [action.concept]
-        new_obs = self.belief[2] + [result]
-        
-        # create and update knowledge of simulator and history of new state
-        new_student = st.Student()
-        new_student.knowledge = new_knowledge
-        new_state = StudentState(new_student)
-        new_state.belief[1] = new_exes
-        new_state.belief[2] = new_obs
-        
+        # create a new state
+        new_state = StudentExactState(new_model, self.sim)
         return new_state
     
     def real_world_perform(self, action):
-        return self.perform(action)
+        # first advance the real world simulator
+        self.sim.advance_simulator(action)
+        
+        # make a copy of the real world simulator
+        new_model = self.sim.copy()
+        
+        # use that to create the new state
+        new_state = StudentExactState(new_model, self.sim)
+        return new_state
     
     def reward(self, parent, action):
         # for now, just use the real knowledge state
-        print('{} {}'.format(self.belief[0].knowledge, action.concept))
-        return np.sum(self.belief[0].knowledge)
+        #print('{} {}'.format(self.model.student.knowledge, action.concept))
+        return self.model.student.knowledge[action.concept]
     
     def is_terminal(self):
         return False
     
     def __eq__(self, other):
-        val = (list(self.belief[0].knowledge), self.belief[1], self.belief[2])
-        oval = (list(other.belief[0].knowledge), other.belief[1], other.belief[2])
+        val = tuple(self.model.student.knowledge)
+        oval = tuple(other.model.student.knowledge)
         return val == oval
     
     def __hash__(self):
-        # take a shortcut and only compare last concept and last observation
-        # because this is only used for storing a dictionary of immediate children (double check this)
-        return int(self.belief[1][-1]*10 + self.belief[2][-1])
+        # because this is only used for storing a dictionary of immediate children, we can use whatever
+        return np.sum(self.model.student.knowledge)
     
     def __str__(self):
-        return 'EX: {} C: {} K: {}'.format(self.belief[1],self.belief[2],self.belief[0].knowledge)
+        return 'K: {}'.format(self.model.student.knowledge)
 
 def DKTState(object):
     '''
@@ -222,27 +221,36 @@ def DKTState(object):
 
 def test_student_sim():
     '''
-    TODO needs updating
+    TODO there's a bug somewhere right now that prevents the policy from learning
     '''
-    horizon = 4
-    nrollouts = 50
+    import concept_dependency_graph as cdg
+    import constants
+    horizon = 10
+    nrollouts = 100
+    n_concepts = 5
     
     random.seed()
     
-    concept_tree = ConceptDependencyGraph()
-    concept_tree.init_default_tree(n=5)
+    concept_tree = cdg.ConceptDependencyGraph()
+    concept_tree.init_default_tree(n=n_concepts)
+    
+    # create the model and simulators
+    student = st.Student()
+    student.knowledge = np.zeros((n_concepts,))
+    sim = StudentExactSim(student, concept_tree)
+    model = sim.copy()
     
     rollout_policy = default_policies.immediate_reward
     #rollout_policy = default_policies.RandomKStepRollOut(10)
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.Bellman(0.95))
     
-    root = StateNode(None, StudentState(st.Student()))
+    root = StateNode(None, StudentExactState(model, sim))
     for i in range(horizon):
         print('Step {}'.format(i))
         best_action = uct(root, n=nrollouts)
         print('Current state: {}'.format(str(root.state)))
-        #print(best_action)
+        print(best_action.concept)
         
         # act in the real environment
         new_root = root.children[best_action].sample_state(real_world=True)
