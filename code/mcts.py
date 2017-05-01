@@ -226,8 +226,8 @@ def test_student_sim():
     import concept_dependency_graph as cdg
     import constants
     horizon = 10
-    nrollouts = 100
-    n_concepts = 5
+    nrollouts = 50
+    n_concepts = 3
     
     random.seed()
     
@@ -235,7 +235,7 @@ def test_student_sim():
     concept_tree.init_default_tree(n=n_concepts)
     
     # create the model and simulators
-    student = st.Student()
+    student = st.Student(p_get_ex_correct_if_concepts_learned=1.0)
     student.knowledge = np.zeros((n_concepts,))
     sim = StudentExactSim(student, concept_tree)
     model = sim.copy()
