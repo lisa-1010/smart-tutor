@@ -1,3 +1,9 @@
 {
-    "dummy": {}
+    "dummy": {}, 
+    "learned_from_modulo": {
+        "architecture": "default", 
+        "n_hidden": 32, 
+        "n_inputdim": 20, 
+        "n_outputdim": 10
+    }
 }

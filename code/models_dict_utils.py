@@ -1,7 +1,8 @@
 import os
 import json
 
-MODELS_DICT_PATH = 'models_dict.json'
+from filepaths import *
+
 
 def init_models_dict():
     all_models_dict = {}
@@ -41,20 +42,20 @@ def load_all_models_dict():
     return all_models_dict
 
 
-def create_new_model_dict(n_timesteps, n_inputdim, n_hidden, n_classes, architecture):
+def create_new_model_dict(n_inputdim, n_hidden, n_outputdim, architecture):
     model_dict = {
-        'n_timesteps': n_timesteps,
+        # 'n_timesteps': n_timesteps,
         'n_inputdim': n_inputdim,
         'n_hidden': n_hidden,
-        'n_classes': n_classes,
+        'n_outputdim': n_outputdim,
         'architecture': architecture,
     }
     return model_dict
 
 
-def diff_to_existing_model_dict(model_id, n_timesteps, n_inputdim, n_hidden, n_classes, architecture):
+def diff_to_existing_model_dict(model_id, n_inputdim, n_hidden, n_outputdim, architecture):
     model_dict = load_model_dict(model_id)
-    new_model_dict = create_new_model_dict(n_timesteps, n_inputdim, n_hidden, n_classes, architecture)
+    new_model_dict = create_new_model_dict(n_inputdim, n_hidden, n_outputdim, architecture)
     is_different = False
     for key in model_dict:
         if model_dict[key] != new_model_dict[key]:
@@ -73,14 +74,14 @@ def model_exists_in_dict(model_id):
     return (model_id in all_models_dict)
 
 
-def check_model_exists_or_create_new(model_id, n_timesteps, n_inputdim, n_hidden, n_classes, architecture):
+def check_model_exists_or_create_new(model_id, n_inputdim, n_hidden, n_outputdim, architecture="default"):
     if not model_exists_in_dict(model_id):
-        new_model_dict = create_new_model_dict(n_timesteps, n_inputdim, n_hidden, n_classes, architecture)
+        new_model_dict = create_new_model_dict(n_inputdim, n_hidden, n_outputdim, architecture)
         save_model_dict(model_id, new_model_dict)
         print ("New model created. Ready to be loaded. ")
     else:
         print ("A model with the same model_id '{}' already exists. ".format(model_id))
-        diff_to_existing_model_dict(model_id, n_timesteps, n_inputdim, n_hidden, n_classes, architecture)
+        diff_to_existing_model_dict(model_id, n_inputdim, n_hidden, n_outputdim, architecture)
 
 
 if __name__ == '__main__':

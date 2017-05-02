@@ -155,7 +155,7 @@ def generate_data(concept_tree, n_students=100, seqlen=100, policy='modulo', fil
     """
 
     data = []
-    print ("Generating data for {} students, with max sequence length {}.".format(n_students, seqlen))
+    print ("Generating data for {} students with behavior policy {} and sequence length {}.".format(n_students, policy, seqlen))
     for i in xrange(n_students):
         if verbose:
             print ("Creating sample for {}th student".format(i))
@@ -164,7 +164,6 @@ def generate_data(concept_tree, n_students=100, seqlen=100, policy='modulo', fil
         data.append(student_sample)
     if filename:
         pickle.dump(data, open(filename, 'wb+'))
-    # print data
     return data
 
 
@@ -225,7 +224,7 @@ def init_synthetic_data():
     concept_tree = ConceptDependencyGraph()
     concept_tree.init_default_tree(n=N_CONCEPTS)
     print ("Initializing synthetic data sets...")
-    n_students = 1000
+    n_students = 10000
     seqlen = 100
     for policy in ['random', 'expert', 'modulo']:
         filename = "{}stud_{}seq_{}.pickle".format(n_students, seqlen, policy)
@@ -233,7 +232,7 @@ def init_synthetic_data():
     print ("Data generation completed. ")
 
 if __name__ == "__main__":
-    main_test()
-    # init_synthetic_data()
+    # main_test()
+    init_synthetic_data()
 
 

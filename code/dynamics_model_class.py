@@ -23,7 +23,7 @@ import numpy as np
 
 import utils
 import dataset_utils as d_utils
-
+import models_dict_utils
 FLAGS = tf.flags.FLAGS
 
 # n_timesteps = 10
@@ -34,31 +34,36 @@ n_outputdim = 10
 
 class DynamicsModel(object):
 
-    def __init__(self, model_id, timesteps=10, load_checkpoint=False):
+    def __init__(self, model_id, timesteps=100, load_checkpoint=False):
         print('Loading RNN dynamics model...')
 
         # if timesteps:
         #     # if provided as an argument, overwrite n_timesteps from the model
         #     n_timesteps = timesteps
         tf.reset_default_graph()
-        self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps, n_inputdim=n_inputdim, n_hidden=n_hidden,
-                                         n_outputdim=n_outputdim)
+
+        model_dict = models_dict_utils.load_model_dict(model_id)
+        self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
+                                                                                 n_inputdim=model_dict["n_inputdim"],
+                                                                                 n_hidden=model_dict["n_hidden"],
+                                                                                 n_outputdim=model_dict["n_outputdim"])
 
         tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
-        checkpoint_path = '../checkpoints/' + model_id + '/'
-
+        checkpoint_dir = '../checkpoints/' + model_id + '/'
+        checkpoint_path = checkpoint_dir + '_/'
         print("Directory path for tensorboard summaries: {}".format(tensorboard_dir))
-        print("Checkpoint directory path: {}".format(checkpoint_path))
+        print("Checkpoint directory path: {}".format(checkpoint_dir))
 
         utils.check_if_path_exists_or_create(tensorboard_dir)
-        utils.check_if_path_exists_or_create(checkpoint_path)
+        utils.check_if_path_exists_or_create(checkpoint_dir)
 
         self.model = tflearn.DNN(self.net, tensorboard_verbose=2, tensorboard_dir=tensorboard_dir, \
                                 checkpoint_path=checkpoint_path, max_checkpoints=3)
 
         if load_checkpoint:
-            checkpoint = tf.train.latest_checkpoint(checkpoint_path)  # can be none of no checkpoint exists
-            if checkpoint and os.path.isfile(checkpoint):
+            checkpoint = tf.train.latest_checkpoint(checkpoint_dir)  # can be none of no checkpoint exists
+            print ("Checkpoint filename: " + checkpoint)
+            if checkpoint:
                 self.model.load(checkpoint, weights_only=True, verbose=True)
                 print('Checkpoint loaded.')
             else:
@@ -72,9 +77,8 @@ class DynamicsModel(object):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
         net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, name="lstm_1")
-        net, hidden_states_2 = tflearn.lstm(net, n_outputdim, return_seq=True, return_state=True, name="lstm_2")
+        net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, name="lstm_2")
         net = tf.stack(net, axis=1)
-        net = tf.sigmoid(net) # to make sure that predictions are between 0 and 1.
         preds = net
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
@@ -82,12 +86,12 @@ class DynamicsModel(object):
         return net, hidden_states_1, hidden_states_2
 
 
-    def train(self, train_data, load_checkpoint=True):
+    def train(self, train_data, n_epoch=64, load_checkpoint=True):
         input_data, output_mask, output_data = train_data
         tf.reset_default_graph()
         date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
         run_id = "{}".format(date_time_string)
-        self.model.fit([input_data, output_mask], output_data, n_epoch=64, validation_set=0.1)
+        self.model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=0.1, run_id=run_id)
 
 
     def predict(self, input_data):

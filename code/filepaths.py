@@ -13,3 +13,5 @@
 
 
 SYN_DATA_DIR = "../synthetic_data/"
+RNN_DATA_DIR = "../preprocessed_rnn_data/"
+MODELS_DICT_PATH = "models_dict.json"

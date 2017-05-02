@@ -21,6 +21,10 @@ import pickle
 import numpy as np
 import tensorflow as tf
 
+# Custom Modules
+from filepaths import *
+from constants import *
+
 from mcts import StudentAction
 
 def load_data(filename=None):
@@ -59,6 +63,19 @@ def preprocess_data_for_rnn(data):
             output_mask[i,t,next_exer_ix] = 1
             target_data[i,t,next_exer_ix] = next_perf
 
+    return input_data, output_mask, target_data
+
+
+def save_rnn_data(input_data, output_mask, target_data, filename):
+    np.save("{}{}_input_data.npy".format(RNN_DATA_DIR, filename), input_data)
+    np.save("{}{}_output_mask.npy".format(RNN_DATA_DIR, filename), output_mask)
+    np.save("{}{}_target_data.npy".format(RNN_DATA_DIR, filename), target_data)
+
+
+def load_rnn_data(filename):
+    input_data = np.load("{}{}_input_data.npy".format(RNN_DATA_DIR, filename))
+    output_mask = np.load("{}{}_output_mask.npy".format(RNN_DATA_DIR, filename))
+    target_data = np.load("{}{}_target_data.npy".format(RNN_DATA_DIR, filename))
     return input_data, output_mask, target_data
 
 
