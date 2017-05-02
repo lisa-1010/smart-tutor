@@ -31,14 +31,15 @@ from constants import *
 
 
 class Student(object):
-    def __init__(self, p_trans_satisfied=0.5, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=0.9, initial_knowledge=0):
+    def __init__(self, n=None, p_trans_satisfied=0.5, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0, initial_knowledge=0):
         self.p_trans_satisfied = p_trans_satisfied
         self.p_trans_not_satisfied = p_trans_not_satisfied
         self.p_get_ex_correct_if_concepts_learned = p_get_ex_correct_if_concepts_learned
+        n_concepts = n if n is not None else N_CONCEPTS
         if np.sum(initial_knowledge) != 0:
             self.knowledge = initial_knowledge
         else:
-            self.knowledge = np.zeros((N_CONCEPTS,))
+            self.knowledge = np.zeros((n_concepts,))
 
 
     def do_exercise(self, concept_tree, ex):

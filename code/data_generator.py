@@ -78,8 +78,9 @@ def choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=Fals
     return concepts
 
 
-def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
+def generate_student_sample(concept_tree, n=None, seqlen=100, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
     '''
+    :param n: number of concepts; if None use N_CONCEPTS
     :param concept_tree: Concept dependency graph
     :param seqlen: number of exercises the student will do.
     :param exercise_seq: Sequence of exercises. list of exercise objects.
@@ -92,8 +93,8 @@ def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial
     (exercise, 0 or 1 indicating success of student on that exercise, knowledge of student after doing exercise)
     Note that this array will have length seqlen, inclusive
     '''
-
-    initial_knowledge = np.zeros((N_CONCEPTS,))
+    n_concepts = n if n is not None else N_CONCEPTS
+    initial_knowledge = np.zeros((n_concepts,))
     initial_knowledge[0] = 1
     s = Student(initial_knowledge=initial_knowledge)
 
@@ -104,13 +105,13 @@ def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial
         # for expert policy, we have to choose the next exercise online.
         exercise_seq = []
         for i in xrange(seqlen):
-            concepts = np.zeros((N_CONCEPTS,))
+            concepts = np.zeros((n_concepts,))
             if policy == 'modulo':
                 # choose exercise with modulo op. This imposes an ordering on exercises.
-                concepts[i % N_CONCEPTS] = 1
+                concepts[i % n_concepts] = 1
             elif policy == 'random':
                 # choose one random concept for this exercise
-                concepts[np.random.randint(N_CONCEPTS)] = 1
+                concepts[np.random.randint(n_concepts)] = 1
             ex = Exercise(concepts=concepts)
             exercise_seq.append(ex)
 
@@ -130,7 +131,7 @@ def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial
         exercises.append(ex.concepts) # makes the assumption that an exercise is equivalent to the concepts it practices)
         student_performance.append(result)
         student_knowledge.append(copy.deepcopy(s.knowledge))
-        if np.sum(s.knowledge) == N_CONCEPTS and n_exercises_to_mastery == -1:
+        if np.sum(s.knowledge) == n_concepts and n_exercises_to_mastery == -1:
             # if verbose and n_exercises_to_mastery == -1:
             n_exercises_to_mastery = i + 1
     if verbose:
