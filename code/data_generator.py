@@ -63,8 +63,8 @@ def choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=Fals
     :param knowledge:
     :return: concepts:
     """
-    concepts = np.zeros((N_CONCEPTS,))
-    for i in xrange(N_CONCEPTS):
+    concepts = np.zeros((concept_tree.n,))
+    for i in xrange(concept_tree.n):
         if not knowledge[i]:
             # if student hasn't learned concept yet:
             concepts[i] = 1
@@ -78,7 +78,7 @@ def choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=Fals
     return concepts
 
 
-def generate_student_sample(concept_tree, n=None, seqlen=100, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
+def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
     '''
     :param n: number of concepts; if None use N_CONCEPTS
     :param concept_tree: Concept dependency graph
@@ -93,7 +93,7 @@ def generate_student_sample(concept_tree, n=None, seqlen=100, exercise_seq=None,
     (exercise, 0 or 1 indicating success of student on that exercise, knowledge of student after doing exercise)
     Note that this array will have length seqlen, inclusive
     '''
-    n_concepts = n if n is not None else N_CONCEPTS
+    n_concepts = concept_tree.n
     initial_knowledge = np.zeros((n_concepts,))
     initial_knowledge[0] = 1
     s = Student(initial_knowledge=initial_knowledge)
