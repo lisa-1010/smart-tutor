@@ -28,6 +28,23 @@ import mctslib.tree_policies as tree_policies
 import mctslib.default_policies as default_policies
 import mctslib.backups as backups
 
+def k2i(knowledge):
+    # converts a knowledge numpy array to a state index
+    ix = 0
+    acc = 1
+    for i in xrange(knowledge.shape[0]):
+        ix += acc * knowledge[i]
+        acc *= 2
+    return int(ix)
+
+def i2k(ix, n_concepts):
+    # converts a state index to a knowledge numpy array
+    knowledge = np.zeros((n_concepts,))
+    for i in xrange(n_concepts):
+        knowledge[i] = ix % 2
+        ix //= 2
+    return knowledge
+
 class StudentSim(object):
     '''
     A model-based simulator for a student. Maintains its own internal hidden state.
@@ -86,51 +103,9 @@ class StudentExactSim(object):
         Make a copy of the current simulator.
         '''
         new_knowledge = np.copy(self.student.knowledge)
-        new_student = st.Student()
+        new_student = copy.copy(self.student)
         new_student.knowledge = new_knowledge
         new_copy = StudentExactSim(new_student, self.dgraph)
-        return new_copy
-
-class SimpleStudentSim(object):
-    '''
-    A model-based simulator for a student. This wraps around SimpleMDP
-    '''
-
-    def __init__(self, smdp):
-        self.smdp = smdp
-        self.curr_s = 1 # assume we start with concept 0 known
-    
-    def advance_simulator(self, action):
-        '''
-        Given next action, simulate the student.
-        :param action: StudentAction object
-        :return: an observation and reward
-        '''
-        # for now, the reward is a full posttest
-        reward = self.smdp._reward(self.curr_s, action.concept)
-        next_probs = self.smdp.transition[self.curr_s,action.concept,:]
-        next_s = self.curr_s
-        
-        acc = 0.0
-        rand = np.random.random()
-        for p in xrange(self.smdp.n_states):
-            acc += next_probs[p]
-            if rand <= acc:
-                next_s = p
-                break
-        self.curr_s = next_s
-        ob = self.smdp._i2k(self.curr_s)[action.concept] # assume no slip
-        return (ob, reward)
-    
-    def copy(self):
-        '''
-        Make a copy of the current simulator.
-        '''
-        new_smdp = SimpleMDP()
-        new_smdp.transition = self.smdp.transition
-        new_smdp.n_concepts = self.smdp.n_concepts
-        new_smdp.n_states = self.smdp.n_states
-        new_copy = SimpleStudentSim(new_smdp)
         return new_copy
 
 class StudentAction(object):
@@ -190,7 +165,7 @@ class StudentExactState(object):
         return new_state
     
     def reward(self, parent, action):
-        # for now, just use the real knowledge state for a full posttest
+        # for now, just use the model knowledge state for a full posttest
         #print('{} {}'.format(self.model.student.knowledge, action.concept))
         return np.sum(self.model.student.knowledge)
     
@@ -204,73 +179,10 @@ class StudentExactState(object):
     
     def __hash__(self):
         # because this is only used for storing a dictionary of immediate children, we can use whatever
-        return np.sum(self.model.student.knowledge)
+        return k2i(self.model.student.knowledge)
     
     def __str__(self):
         return 'K: {}'.format(self.model.student.knowledge)
-
-class SimpleStudentState(object):
-    '''
-    This uses SimpleStudentSim as the model.
-    '''
-    def __init__(self, model, sim):
-        '''
-        :param model: SimpleStudentSim for the model
-        :param sim: StudentExactSim for the real world
-        '''
-        self.belief = None # not going to use belief at all because we know the exact state
-        self.model = model
-        self.sim = sim
-        self.n_concepts = self.model.smdp.n_concepts
-        
-        self.actions = []
-        for i in range(self.n_concepts):
-            concepts = np.zeros((self.n_concepts,))
-            concepts[i] = 1
-            self.actions.append(StudentAction(i, concepts))
-    
-    def perform(self, action):
-        # make a copy of the model
-        new_model = self.model.copy()
-        
-        # advance the new model
-        new_model.advance_simulator(action)
-        
-        # create a new state
-        new_state = SimpleStudentState(new_model, self.sim)
-        return new_state
-    
-    def real_world_perform(self, action):
-        # first advance the real world simulator
-        self.sim.advance_simulator(action)
-        
-        # make a copy of the model and set its state
-        new_model = self.model.copy()
-        new_model.curr_s = self.model.smdp._k2i(self.sim.student.knowledge)
-        
-        # use that to create the new state
-        new_state = SimpleStudentState(new_model, self.sim)
-        return new_state
-    
-    def reward(self, parent, action):
-        # for now, just use the real knowledge state for a full posttest
-        #print('{} {}'.format(self.model.student.knowledge, action.concept))
-        return self.model.smdp._reward(self.model.curr_s, action.concept)
-    
-    def is_terminal(self):
-        return False
-    
-    def __eq__(self, other):
-        val = self.model.curr_s
-        oval = other.model.curr_s
-        return val == oval
-    
-    def __hash__(self):
-        # because this is only used for storing a dictionary of immediate children, we can use whatever
-        return self.model.curr_s
-    
-    def __str__(self):
-        return 'K: {}'.format(self.model.curr_s)
     
 def DKTState(object):
     '''
@@ -325,55 +237,85 @@ def DKTState(object):
     def __str__(self):
         pass
 
-
-def test_student_sim():
+def test_student_exact_single(dgraph, horizon, n_rollouts):
     '''
-    TODO there's a bug somewhere right now
+    Performs a single trajectory with MCTS and returns the final true student knowlegde.
     '''
-    import concept_dependency_graph as cdg
-    horizon = 10
-    nrollouts = 100
-    n_concepts = 3
-    
-    random.seed()
-    
-    concept_tree = cdg.ConceptDependencyGraph()
-    concept_tree.init_default_tree(n=n_concepts)
+    n_concepts = dgraph.n
     
     # create the model and simulators
     student = st.Student(p_get_ex_correct_if_concepts_learned=1.0)
     student.knowledge = np.zeros((n_concepts,))
     student.knowledge[0] = 1 # initialize the first concept to be known
-    sim = StudentExactSim(student, concept_tree)
+    sim = StudentExactSim(student, dgraph)
     model = sim.copy()
-    
-    # simple MDP model
-    data = dg.generate_data(concept_tree, n_students=100, seqlen=10, policy='random', filename=None, verbose=False)
-    smdp = SimpleMDP()
-    smdp.train(data)
-    simple_model = SimpleStudentSim(smdp)
     
     rollout_policy = default_policies.immediate_reward
     #rollout_policy = default_policies.RandomKStepRollOut(10)
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
-               backups.Bellman(0.95))
+               backups.monte_carlo)
     
-    #root = StateNode(None, StudentExactState(model, sim))
-    root = StateNode(None, SimpleStudentState(simple_model, sim))
+    root = StateNode(None, StudentExactState(model, sim))
     for i in range(horizon):
-        print('Step {}'.format(i))
-        best_action = uct(root, n=nrollouts)
-        print('Current state: {}'.format(str(root.state)))
-        print(best_action.concept)
+        #print('Step {}'.format(i))
+        best_action = uct(root, n=n_rollouts)
+        #print('Current state: {}'.format(str(root.state)))
+        #print(best_action.concept)
         
         # act in the real environment
         new_root = root.children[best_action].sample_state(real_world=True)
         new_root.parent = None # cutoff the rest of the tree
         root = new_root
-        print('Next state: {}'.format(str(new_root.state)))
+        #print('Next state: {}'.format(str(new_root.state)))
+    return sim.student.knowledge
 
+def expected_reward(data):
+    '''
+    :param data: output from generate_data
+    :return: the sample mean of the posttest reward
+    '''
+    avg = 0.0
+    for i in xrange(len(data)):
+        avg += np.mean(data[i][-1][2])
+    return avg / len(data)
+
+def percent_complete(data):
+    '''
+    :param data: output from generate_data
+    :return: the percentage of trajectories with perfect posttest
+    '''
+    count = 0.0
+    for i in xrange(len(data)):
+        if int(np.sum(data[i][-1][2])) == data[i][-1][2].shape[0]:
+            count += 1
+    return count / len(data)
+
+def test_student_exact():
+    '''
+    Currently MCTS seems to be a little bit off from the optimal policy, not quite sure why.
+    '''
+    import concept_dependency_graph as cdg
+    n_concepts = 5
+    horizon = 10
+    n_rollouts = 20
+    n_trajectories = 1000
+    
+    random.seed()
+    
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n=n_concepts)
+    
+    avg = 0.0
+    for i in xrange(n_trajectories):
+        k = test_student_exact_single(dgraph, horizon, n_rollouts)
+        avg += np.mean(k)
+    avg = avg / n_trajectories
+    
+    test_data = dg.generate_data(dgraph, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
+    print('Average posttest true: {}'.format(expected_reward(test_data)))
+    print('Average posttest mcts: {}'.format(avg))
 
 if __name__ == '__main__':
-    test_student_sim()
+    test_student_exact()
 
 
