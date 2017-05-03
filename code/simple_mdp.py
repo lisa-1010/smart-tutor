@@ -103,22 +103,106 @@ class SimpleMDP(object):
                     maxdiff = max(maxdiff, abs(self.q[x,c] - rhs))
                     self.q[x,c] = rhs
         
+def create_custom_dependency():
+    '''
+    Creates the following dependency tree (where 0 is a prerequisite of 1)
+                  0
+                 / \
+                1   2
+               /     \
+              3       4
+    '''
+    dgraph = ConceptDependencyGraph()
+    dgraph.n = 5
+    dgraph.root = 0
+    
+    dgraph.children[0] = [1,2]
+    dgraph.children[1] = [3]
+    dgraph.children[2] = [4]
+    
+    dgraph.parents[4] = [2]
+    dgraph.parents[3] = [1]
+    dgraph.parents[2] = [0]
+    dgraph.parents[1] = [0]
+    
+    dgraph._create_prereq_map()
+    #print(dgraph.prereq_map)
+    
+    return dgraph
+
+def expected_reward(data):
+    '''
+    :param data: output from generate_data
+    :return: the sample mean of the posttest reward
+    '''
+    avg = 0.0
+    for i in xrange(len(data)):
+        avg += np.mean(data[i][-1][2])
+    return avg / len(data)
+
+def percent_complete(data):
+    '''
+    :param data: output from generate_data
+    :return: the percentage of trajectories with perfect posttest
+    '''
+    count = 0.0
+    for i in xrange(len(data)):
+        if int(np.sum(data[i][-1][2])) == data[i][-1][2].shape[0]:
+            count += 1
+    return count / len(data)
 
 if __name__ == '__main__':
     # test out the model
-    n_concepts = 3
-    
-    # simple dependency graph
-    dgraph = ConceptDependencyGraph()
-    dgraph.init_default_tree(n_concepts)
+    dgraph = create_custom_dependency()
     
     
-    data = generate_data(dgraph, n_students=100, seqlen=10, policy='random', filename=None, verbose=False)
-    print(data[0])
+    data = generate_data(dgraph, n_students=1000, seqlen=3, policy='random', filename=None, verbose=False)
+    print('Average posttest: {}'.format(expected_reward(data)))
+    print('Percent of full posttest score: {}'.format(percent_complete(data)))
+    # expert is 0.98
+    # random is 0.62
     
     smdp = SimpleMDP()
     smdp.train(data)
-    print(smdp.transition)
+    #print(smdp.transition)
     smdp.vi(0.95)
-    print(smdp.q)
+    '''
+    What should be the optimal policy?
+    00000
+    10000 [1 2]
+    01000
+    11000 [2 3]
+    00100
+    10100 [1 4]
+    01100
+    11100 [3 4]
+    00010
+    10010
+    01010
+    11010 [2]
+    00110
+    10110
+    01110
+    11110 [4]
+    00001
+    10001
+    01001
+    11001
+    00101
+    10101 [1]
+    01101
+    11101 [3]
+    00011
+    10011
+    01011
+    11011
+    00111
+    10111
+    01111
+    11111
+    The states left blank are impossible states
+    '''
+    for i,acts in [(1,[1,2]),(3,[2,3]),(5,[1,4]),(7,[3,4]),(11,[2]),(15,[4]),(21,[1]),(23,[3])]:
+        policy_a = np.argmax(smdp.q[i,:])
+        print('{} {}'.format(policy_a in acts, smdp.q[i,:]))
     
