@@ -37,5 +37,5 @@ def monte_carlo(node):
     r = node.reward
     while node is not None:
         node.n += 1
-        node.q = ((node.n - 1)/node.n) * node.q + 1/node.n * r
+        node.q = ((node.n - 1.0)/node.n) * node.q + 1.0/node.n * r
         node = node.parent

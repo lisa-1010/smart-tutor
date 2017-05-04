@@ -7,8 +7,8 @@ def immediate_reward(state_node):
     :param state_node:
     :return:
     """
-    return state_node.state.reward(state_node.parent.parent.state,
-                                   state_node.parent.action)
+    #DANIEL: edited the reward function to get rid of the parent argument and will just be a function of the current state
+    return state_node.state.reward()
 
 
 class RandomKStepRollOut(object):
@@ -23,7 +23,7 @@ class RandomKStepRollOut(object):
 
         def stop_k_step(state):
             self.current_k += 1
-            return self.current_k > self.k or state.is_terminal()
+            return self.current_k >= self.k or state.is_terminal()
 
         return _roll_out(state_node, stop_k_step)
 
@@ -44,15 +44,15 @@ def random_terminal_roll_out(state_node):
 
 
 def _roll_out(state_node, stopping_criterion):
+    #DANIEL fixed so that it still returns the correct reward when starting on a terminal state
+    #DANIEL: edited the reward function to get rid of the parent argument and will just be a function of the current state
     reward = 0
     state = state_node.state
-    parent = state_node.parent.parent.state
-    action = state_node.parent.action
-    while not stopping_criterion(state):
-        reward += state.reward(parent, action)
-
-        action = random.choice(state_node.state.actions)
-        parent = state
-        state = parent.perform(action)
-
+    while True:
+        reward += state.reward()
+        if stopping_criterion(state):
+            break
+        else:
+            action = random.choice(state.actions)
+            state = state.perform(action)
     return reward

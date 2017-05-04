@@ -21,13 +21,14 @@ import dynamics_model_class as dmc
 
 from simple_mdp import SimpleMDP
 
-from mctslib.graph import StateNode
+from mctslib.graph import *
 from mctslib.mcts import *
 
 import mctslib.tree_policies as tree_policies
 import mctslib.default_policies as default_policies
 import mctslib.backups as backups
 
+# helper functions
 def k2i(knowledge):
     # converts a knowledge numpy array to a state index
     ix = 0
@@ -44,6 +45,27 @@ def i2k(ix, n_concepts):
         knowledge[i] = ix % 2
         ix //= 2
     return knowledge
+
+def compute_optimal_actions(concept_tree, knowledge):
+    """
+    Compute a list of optimal actions (concepts) for the current knowledge.
+    """
+    opt_acts = []
+    for i in xrange(concept_tree.n):
+        if not knowledge[i]:
+            # if student hasn't learned concept yet:
+            # check whether prereqs are fulfilled
+            concepts = np.zeros((concept_tree.n,))
+            concepts[i] = 1
+            if dg.fulfilled_prereqs(concept_tree, knowledge, concepts):
+                # this is one optimal action
+                opt_acts.append(i)
+    if not opt_acts:
+        # if no optimal actions, then it means everything is already learned
+        # so all actions are optimal
+        opt_acts = list(xrange(concept_tree.n))
+    return opt_acts
+        
 
 class StudentSim(object):
     '''
@@ -126,14 +148,18 @@ class StudentExactState(object):
     '''
     The "state" to be used in MCTS. We use the exact student knowledge as the state so this is an MDP
     '''
-    def __init__(self, model, sim):
+    def __init__(self, model, sim, step, horizon):
         '''
         :param model: StudentExactSim for the model
         :param sim: StudentExactSim for the real world
+        :param step: the current timestep (starts from 1)
+        :param horizon: the horizon length
         '''
         self.belief = None # not going to use belief at all because we know the exact state
         self.model = model
         self.sim = sim
+        self.step = step
+        self.horizon = horizon
         self.n_concepts = model.student.knowledge.shape[0]
         
         self.actions = []
@@ -150,7 +176,7 @@ class StudentExactState(object):
         new_model.advance_simulator(action)
         
         # create a new state
-        new_state = StudentExactState(new_model, self.sim)
+        new_state = StudentExactState(new_model, self.sim, self.step+1, self.horizon)
         return new_state
     
     def real_world_perform(self, action):
@@ -161,16 +187,20 @@ class StudentExactState(object):
         new_model = self.sim.copy()
         
         # use that to create the new state
-        new_state = StudentExactState(new_model, self.sim)
+        new_state = StudentExactState(new_model, self.sim, self.step+1, self.horizon)
         return new_state
     
-    def reward(self, parent, action):
-        # for now, just use the model knowledge state for a full posttest
-        #print('{} {}'.format(self.model.student.knowledge, action.concept))
-        return np.sum(self.model.student.knowledge)
+    def reward(self):
+        # for now, just use the model knowledge state for a full posttest at the end
+        #print('Step {} of {} state {}'.format(self.step, self.horizon, self.model.student.knowledge))
+        r = np.sum(self.model.student.knowledge)
+        if self.step > self.horizon or True: # toggle between reward every step or only at the end
+            return r
+        else:
+            return 0
     
     def is_terminal(self):
-        return False
+        return self.step > self.horizon
     
     def __eq__(self, other):
         val = tuple(self.model.student.knowledge)
@@ -187,7 +217,7 @@ class StudentExactState(object):
 def DKTState(object):
     '''
     The belief state to be used in MCTS, implemented using a DKT.
-    TODO: needs to be updated when RnnStudentSim is updated
+    TODO: needs to be completed
     '''
     def __init__(self, model, sim):
         '''
@@ -221,7 +251,7 @@ def DKTState(object):
         new_model.advance_simulator(action, ob)
         return DKTState(new_model, self.sim)
     
-    def reward(self, parent, action):
+    def reward(self, action):
         pass
     
     def is_terminal(self):
@@ -237,6 +267,16 @@ def DKTState(object):
     def __str__(self):
         pass
 
+def debug_visiter(node, data):
+    print('Curr node id: {} n: {} q: {}'.format(id(node), node.n, node.q))
+    print('Parent id: {}'.format(str(id(node.parent)) if node.parent is not None else 'None'))
+    if isinstance(node, ActionNode):
+        print('Action {}'.format(node.action.concept))
+    elif isinstance(node, StateNode):
+        print('State {} step: {}/{} r: {}'.format(node.state.model.student.knowledge, node.state.step, node.state.horizon, node.reward))
+    else:
+        print('Not action nor state')
+
 def test_student_exact_single(dgraph, horizon, n_rollouts):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowlegde.
@@ -250,17 +290,27 @@ def test_student_exact_single(dgraph, horizon, n_rollouts):
     sim = StudentExactSim(student, dgraph)
     model = sim.copy()
     
-    rollout_policy = default_policies.immediate_reward
-    #rollout_policy = default_policies.RandomKStepRollOut(10)
+    #rollout_policy = default_policies.immediate_reward
+    rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.monte_carlo)
     
-    root = StateNode(None, StudentExactState(model, sim))
+    root = StateNode(None, StudentExactState(model, sim, 1, horizon))
     for i in range(horizon):
         #print('Step {}'.format(i))
         best_action = uct(root, n=n_rollouts)
         #print('Current state: {}'.format(str(root.state)))
         #print(best_action.concept)
+        
+        # debug check for whether action is optimal
+        if True:
+            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
+            is_opt = best_action.concept in opt_acts
+            if not is_opt:
+                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
+                # now let's print out even more debugging information
+                #breadth_first_search(root, fnc=debug_visiter)
+                #return None
         
         # act in the real environment
         new_root = root.children[best_action].sample_state(real_world=True)
@@ -292,13 +342,15 @@ def percent_complete(data):
 
 def test_student_exact():
     '''
-    Currently MCTS seems to be a little bit off from the optimal policy, not quite sure why.
+    MCTS is now working.
+    The number of rollouts required to be optimal grows very fast as a function of the horizon.
+    Still, even if not fully optimal, MCTS is an extremely good approximation.
     '''
     import concept_dependency_graph as cdg
     n_concepts = 5
-    horizon = 10
-    n_rollouts = 20
-    n_trajectories = 1000
+    horizon = 6
+    n_rollouts = 100
+    n_trajectories = 100
     
     random.seed()
     
