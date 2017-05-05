@@ -41,12 +41,12 @@ class DynamicsModel(object):
         #     # if provided as an argument, overwrite n_timesteps from the model
         #     n_timesteps = timesteps
         tf.reset_default_graph()
-
-        model_dict = models_dict_utils.load_model_dict(model_id)
+        self.timesteps = timesteps
+        self.model_dict = models_dict_utils.load_model_dict(model_id)
         self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
-                                                                                 n_inputdim=model_dict["n_inputdim"],
-                                                                                 n_hidden=model_dict["n_hidden"],
-                                                                                 n_outputdim=model_dict["n_outputdim"])
+                                                                                 n_inputdim=self.model_dict["n_inputdim"],
+                                                                                 n_hidden=self.model_dict["n_hidden"],
+                                                                                 n_outputdim=self.model_dict["n_outputdim"])
 
         tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
         checkpoint_dir = '../checkpoints/' + model_id + '/'
@@ -87,6 +87,13 @@ class DynamicsModel(object):
 
 
     def train(self, train_data, n_epoch=64, load_checkpoint=True):
+        """
+
+        :param train_data: tuple (input_data, output_mask, output_data)
+        :param n_epoch: number of epochs to train for
+        :param load_checkpoint: whether to train from checkpoint or from scratch
+        :return:
+        """
         input_data, output_mask, output_data = train_data
         tf.reset_default_graph()
         date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
@@ -95,8 +102,24 @@ class DynamicsModel(object):
 
 
     def predict(self, input_data):
+        """
+        :param input_data: of shape (n_samples, n_timesteps, n_inputdim).
+        :return:
+        """
         n_samples, n_timesteps, n_inputdim = input_data.shape
+        assert(n_inputdim == self.model_dict["n_inputdim"]), "input dimension of data doesn't match the model."
+        n_outputdim = self.model_dict["n_outputdim"]
         output_mask = np.ones((n_samples, n_timesteps, n_outputdim))
+        if n_timesteps < self.timesteps:  # pad inputs and mask
+            padded_input = np.zeros((n_samples, self.timesteps, n_inputdim))
+            padded_input[:, :n_timesteps, :] = input_data[:, :, :]
+            input_data = padded_input
+            padded_mask = np.zeros((n_samples, self.timesteps, n_outputdim))
+            padded_mask[:,:n_timesteps,:] = output_mask[:,:,:]
+            output_mask = padded_mask
+        elif n_timesteps > self.timesteps: # truncate inputs and mask
+            input_data = input_data[:, :self.timesteps, :]
+            output_mask = output_mask[:, :self.timesteps, :]
         tf.reset_default_graph()
         return self.model.predict([input_data, output_mask])
 
