@@ -8,7 +8,7 @@
 #===============================================================================
 # CURRENT STATUS: In Progress
 #===============================================================================
-# USAGE: from simple_mdp import SimpleMDP
+# USAGE: import simple_mdp as sm
 
 import numpy as np
 

@@ -11,5 +11,11 @@
         "n_hidden": 16,
         "n_inputdim": 10,
         "n_outputdim": 5
+    },
+    "test_model_small": {
+        "architecture": "default",
+        "n_hidden": 5,
+        "n_inputdim": 10,
+        "n_outputdim": 5
     }
 }

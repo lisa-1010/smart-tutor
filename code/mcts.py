@@ -454,6 +454,7 @@ def test_dkt_single(dgraph, horizon, n_rollouts, model):
 def test_dkt():
     '''
     Test DKT+MCTS
+    test_model
     horizon 5
     Optimal is around 0.69
     With 10000 training samples, DKT gets 0.55
@@ -462,6 +463,10 @@ def test_dkt():
     horizon 10
     optimal is around 0.95
     with 100000 is around 0.92
+    
+    horizon 10
+    test_model_small
+    with 100000 is around 0.95
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
