@@ -214,31 +214,50 @@ class StudentExactState(object):
     def __str__(self):
         return 'K: {}'.format(self.model.student.knowledge)
     
-def DKTState(object):
+class DKTState(object):
     '''
     The belief state to be used in MCTS, implemented using a DKT.
-    TODO: needs to be completed
     '''
-    def __init__(self, model, sim):
+    def __init__(self, model, sim, step, horizon, act_hist=[], ob_hist=[]):
         '''
         :param model: RnnStudentSim object
         :param sim: StudentExactSim object
         '''
+        # the model will be passed down when doing real world perform
         self.belief = model
+        self.step = step
+        self.horizon = horizon
+        # keep track of history for debugging and various uses
+        self.act_hist = act_hist
+        self.ob_hist = ob_hist
         # this sim should be shared between all DKTStates
         # and it is advanced only when real_world_perform is called
         # so all references to it will all be advanced
         self.sim = sim
+        self.n_concepts = sim.student.knowledge.shape[0]
+        
+        self.actions = []
+        for i in range(self.n_concepts):
+            concepts = np.zeros((self.n_concepts,))
+            concepts[i] = 1
+            self.actions.append(StudentAction(i, concepts))
     
     def perform(self, action):
         '''
         Creates a new state where the DKT model is advanced.
         Samples the observation from the DKT model.
         '''
-        ob = self.belief.sample_observation(action)
+        probs = self.belief.sample_observations()
+        if probs is None:
+            # assume [1 0 0 0 0 ...]
+            probs = [0] * self.sim.dgraph.n
+            probs[0] = 1
+        ob = 1 if np.random.random() < probs[action.concept] else 0
         new_model = self.belief.copy()
         new_model.advance_simulator(action, ob)
-        return DKTState(new_model, self.sim)
+        new_act_hist = self.act_hist + [action.concept]
+        new_ob_hist = self.ob_hist + [ob]
+        return DKTState(new_model, self.sim, self.step+1, self.horizon, act_hist=new_act_hist, ob_hist=new_ob_hist)
     
     def real_world_perform(self, action):
         '''
@@ -247,25 +266,45 @@ def DKTState(object):
         '''
         # advance the true student simulator
         (ob, r) = self.sim.advance_simulator(action)
+        # advance the model with the true observation
         new_model = self.belief.copy()
         new_model.advance_simulator(action, ob)
-        return DKTState(new_model, self.sim)
+        new_act_hist = self.act_hist + [action.concept]
+        new_ob_hist = self.ob_hist + [ob]
+        return DKTState(new_model, self.sim, self.step+1, self.horizon, act_hist=new_act_hist, ob_hist=new_ob_hist)
     
-    def reward(self, action):
-        pass
+    def reward(self):
+        r = self.belief.sample_reward()
+        if self.step > self.horizon or True: # toggle between reward every step or only at the end
+            return r
+        else:
+            return 0
     
     def is_terminal(self):
-        pass
+        return self.step > self.horizon
     
     def __eq__(self, other):
         # compare the histories
-        return self.belief.sequence == other.belief.sequence
+        return self.act_hist == other.act_hist and self.ob_hist == other.ob_hist
     
     def __hash__(self):
-        pass
+        # round the predictions first, then convert to index
+        probs = self.belief.sample_observations()
+        if probs is None:
+            # assume [1 0 0 0 0 ...]
+            probs = [0] * self.sim.dgraph.n
+            probs[0] = 1
+        else:
+            probs = np.round(probs).astype(np.int)
+        return k2i(probs)
     
     def __str__(self):
-        pass
+        probs = self.belief.sample_observations()
+        if probs is None:
+            # assume [1 0 0 0 0 ...]
+            probs = [0] * self.sim.dgraph.n
+            probs[0] = 1
+        return 'K {} Actions {} Obs {}'.format(probs, self.act_hist, self.ob_hist)
 
 def debug_visiter(node, data):
     print('Curr node id: {} n: {} q: {}'.format(id(node), node.n, node.q))
@@ -347,15 +386,15 @@ def test_student_exact():
     Still, even if not fully optimal, MCTS is an extremely good approximation.
     '''
     import concept_dependency_graph as cdg
+    from simple_mdp import create_custom_dependency
     n_concepts = 5
-    horizon = 6
-    n_rollouts = 100
+    horizon = 10
+    n_rollouts = 50
     n_trajectories = 100
     
     random.seed()
     
-    dgraph = cdg.ConceptDependencyGraph()
-    dgraph.init_default_tree(n=n_concepts)
+    dgraph = create_custom_dependency()
     
     avg = 0.0
     for i in xrange(n_trajectories):
@@ -367,7 +406,88 @@ def test_student_exact():
     print('Average posttest true: {}'.format(expected_reward(test_data)))
     print('Average posttest mcts: {}'.format(avg))
 
+
+def test_dkt_single(dgraph, horizon, n_rollouts, model):
+    '''
+    Performs a single trajectory with MCTS and returns the final true student knowlegde.
+    '''
+    n_concepts = dgraph.n
+    
+    # create the model and simulators
+    student = st.Student(p_get_ex_correct_if_concepts_learned=1.0)
+    student.knowledge = np.zeros((n_concepts,))
+    student.knowledge[0] = 1 # initialize the first concept to be known
+    sim = StudentExactSim(student, dgraph)
+    
+    # make the model
+    model = dmc.RnnStudentSim(model)
+    
+    #rollout_policy = default_policies.immediate_reward
+    rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
+    uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
+               backups.monte_carlo)
+    
+    root = StateNode(None, DKTState(model, sim, 1, horizon))
+    for i in range(horizon):
+        #print('Step {}'.format(i))
+        best_action = uct(root, n=n_rollouts)
+        #print('Current state: {}'.format(str(root.state)))
+        #print(best_action.concept)
+        
+        # debug check for whether action is optimal
+        if True:
+            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
+            is_opt = best_action.concept in opt_acts
+            if not is_opt:
+                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
+                # now let's print out even more debugging information
+                #breadth_first_search(root, fnc=debug_visiter)
+                #return None
+        
+        # act in the real environment
+        new_root = root.children[best_action].sample_state(real_world=True)
+        new_root.parent = None # cutoff the rest of the tree
+        root = new_root
+        #print('Next state: {}'.format(str(new_root.state)))
+    return sim.student.knowledge
+
+def test_dkt():
+    '''
+    Test DKT+MCTS
+    horizon 5
+    Optimal is around 0.69
+    With 10000 training samples, DKT gets 0.55
+    With 100000 samples DKT gets 0.59
+    
+    horizon 10
+    optimal is around 0.95
+    with 100000 is around 0.92
+    '''
+    import concept_dependency_graph as cdg
+    from simple_mdp import create_custom_dependency
+    n_concepts = 5
+    horizon = 10
+    n_rollouts = 50
+    n_trajectories = 100
+    
+    random.seed()
+    
+    dgraph = create_custom_dependency()
+    model_id = 'test_model'
+    model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    
+    avg = 0.0
+    for i in xrange(n_trajectories):
+        k = test_dkt_single(dgraph, horizon, n_rollouts, model)
+        avg += np.mean(k)
+    avg = avg / n_trajectories
+    
+    test_data = dg.generate_data(dgraph, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
+    print('Average posttest true: {}'.format(expected_reward(test_data)))
+    print('Average posttest mcts: {}'.format(avg))
+
 if __name__ == '__main__':
-    test_student_exact()
+    #test_student_exact()
+    test_dkt()
 
 

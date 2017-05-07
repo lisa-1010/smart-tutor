@@ -156,11 +156,10 @@ if __name__ == '__main__':
     dgraph = create_custom_dependency()
     
     
-    data = generate_data(dgraph, n_students=1000, seqlen=3, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, n_students=1000, seqlen=5, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
-    # expert is 0.98
-    # random is 0.62
+    # for seqlen=5 expert=0.68
     
     smdp = SimpleMDP()
     smdp.train(data)
