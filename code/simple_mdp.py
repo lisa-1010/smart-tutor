@@ -156,10 +156,11 @@ if __name__ == '__main__':
     dgraph = create_custom_dependency()
     
     
-    data = generate_data(dgraph, n_students=1000, seqlen=5, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, n_students=1000, seqlen=3, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
     # for seqlen=5 expert=0.68
+    # seqlen=3 seems to be the point where there should be enough information to generalize the optimal policy
     
     smdp = SimpleMDP()
     smdp.train(data)

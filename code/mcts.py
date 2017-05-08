@@ -464,9 +464,14 @@ def test_dkt():
     optimal is around 0.95
     with 100000 is around 0.92
     
-    horizon 10
     test_model_small
+    horizon 10
     with 100000 is around 0.95
+    with 10000 is around 0.95
+    
+    test_model_small train data horizon 3
+    horizon 10
+    with 10000 is around 0.93 to 0.94
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
