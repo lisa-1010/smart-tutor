@@ -471,7 +471,7 @@ def test_dkt():
     
     test_model_small train data horizon 3
     horizon 10
-    with 10000 is around 0.93 to 0.94
+    with 10000 is around ...
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
@@ -483,8 +483,14 @@ def test_dkt():
     random.seed()
     
     dgraph = create_custom_dependency()
+    #model_id = 'test_model_small'
+    #model_id = 'test_model_mid'
     model_id = 'test_model'
     model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    
+    print('Testing model: {}'.format(model_id))
+    print('horizon: {}'.format(horizon))
+    print('rollouts: {}'.format(n_rollouts))
     
     avg = 0.0
     for i in xrange(n_trajectories):
