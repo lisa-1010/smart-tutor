@@ -151,14 +151,29 @@ def percent_complete(data):
             count += 1
     return count / len(data)
 
+def percent_all_seen(data):
+    '''
+    Return the percentage of trajectories where all skills other than skill 0 have been tested
+    '''
+    count = 0.0
+    for i in xrange(len(data)):
+        seen = data[i][0][0].astype(np.int)
+        seen[0] = 1
+        for j in xrange(len(data[i])):
+            seen += data[i][j][0].astype(np.int)
+        if np.all(seen > 0.5):
+            count += 1.0
+    return count / len(data)
+
 if __name__ == '__main__':
     # test out the model
     dgraph = create_custom_dependency()
     
     
-    data = generate_data(dgraph, n_students=1000, seqlen=3, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, n_students=100000, seqlen=4, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
+    print('Percent of all seen: {}'.format(percent_all_seen(data)))
     # for seqlen=5 expert=0.68
     # seqlen=3 seems to be the point where there should be enough information to generalize the optimal policy
     
