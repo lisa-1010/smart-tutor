@@ -14,6 +14,7 @@ import numpy as np
 
 from concept_dependency_graph import *
 from data_generator import *
+from student import Student
 
 class SimpleMDP(object):
     def __init__(self):
@@ -169,8 +170,10 @@ if __name__ == '__main__':
     # test out the model
     dgraph = create_custom_dependency()
     
+    # custom student
+    student = Student(p_trans_satisfied=0.15, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
     
-    data = generate_data(dgraph, n_students=100000, seqlen=4, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, student=student, n_students=100000, seqlen=4, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
     print('Percent of all seen: {}'.format(percent_all_seen(data)))

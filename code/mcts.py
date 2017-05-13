@@ -20,6 +20,7 @@ import exercise as exer
 import dynamics_model_class as dmc
 
 from simple_mdp import SimpleMDP
+from joblib import Parallel, delayed
 
 from mctslib.graph import *
 from mctslib.mcts import *
@@ -316,14 +317,14 @@ def debug_visiter(node, data):
     else:
         print('Not action nor state')
 
-def test_student_exact_single(dgraph, horizon, n_rollouts):
+def test_student_exact_single(dgraph, learn_prob, horizon, n_rollouts):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowlegde.
     '''
     n_concepts = dgraph.n
     
     # create the model and simulators
-    student = st.Student(p_get_ex_correct_if_concepts_learned=1.0)
+    student = st.Student(p_trans_satisfied=learn_prob,p_get_ex_correct_if_concepts_learned=1.0)
     student.knowledge = np.zeros((n_concepts,))
     student.knowledge[0] = 1 # initialize the first concept to be known
     sim = StudentExactSim(student, dgraph)
@@ -342,7 +343,7 @@ def test_student_exact_single(dgraph, horizon, n_rollouts):
         #print(best_action.concept)
         
         # debug check for whether action is optimal
-        if True:
+        if False:
             opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
             is_opt = best_action.concept in opt_acts
             if not is_opt:
@@ -357,6 +358,17 @@ def test_student_exact_single(dgraph, horizon, n_rollouts):
         root = new_root
         #print('Next state: {}'.format(str(new_root.state)))
     return sim.student.knowledge
+
+def test_student_exact_chunk(n_trajectories, dgraph, learn_prob, horizon, n_rollouts):
+    '''
+    Runs a bunch of trajectories and returns the avg posttest score.
+    For parallelization to run in a separate thread/process.
+    '''
+    acc = 0.0
+    for i in xrange(n_trajectories):
+        k = test_student_exact_single(dgraph, learn_prob, horizon, n_rollouts)
+        acc += np.mean(k)
+    return acc
 
 def expected_reward(data):
     '''
@@ -384,37 +396,44 @@ def test_student_exact():
     MCTS is now working.
     The number of rollouts required to be optimal grows very fast as a function of the horizon.
     Still, even if not fully optimal, MCTS is an extremely good approximation.
+    
+    Default student with horizon 10 needs about 50 rollouts is good
+    learn prob 0.15 student with horizon 40 needs about 150 rollouts is good; gets about 0.94 which is 0.02 off from 0.96
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     n_concepts = 5
-    horizon = 10
-    n_rollouts = 50
+    learn_prob = 0.15
+    horizon = 40
+    n_rollouts = 150
     n_trajectories = 100
+    n_jobs = 8
+    traj_per_job =  n_trajectories // n_jobs
     
     random.seed()
+    np.random.seed()
     
     dgraph = create_custom_dependency()
+    student = st.Student(p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
     
-    avg = 0.0
-    for i in xrange(n_trajectories):
-        k = test_student_exact_single(dgraph, horizon, n_rollouts)
-        avg += np.mean(k)
-    avg = avg / n_trajectories
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_student_exact_chunk)(traj_per_job, dgraph, learn_prob, horizon, n_rollouts) for _ in range(n_jobs))
+    avg = sum(accs) / (n_jobs * traj_per_job)
     
-    test_data = dg.generate_data(dgraph, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
+    test_data = dg.generate_data(dgraph, student=student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
+    print('Number of jobs {}'.format(n_jobs))
+    print('Trajectory per job {}'.format(traj_per_job))
     print('Average posttest true: {}'.format(expected_reward(test_data)))
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, horizon, n_rollouts, model):
+def test_dkt_single(dgraph, learn_prob, horizon, n_rollouts, model):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowlegde.
     '''
     n_concepts = dgraph.n
     
     # create the model and simulators
-    student = st.Student(p_get_ex_correct_if_concepts_learned=1.0)
+    student = st.Student(p_trans_satisfied=learn_prob,p_get_ex_correct_if_concepts_learned=1.0)
     student.knowledge = np.zeros((n_concepts,))
     student.knowledge[0] = 1 # initialize the first concept to be known
     sim = StudentExactSim(student, dgraph)
@@ -435,7 +454,7 @@ def test_dkt_single(dgraph, horizon, n_rollouts, model):
         #print(best_action.concept)
         
         # debug check for whether action is optimal
-        if True:
+        if False:
             opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
             is_opt = best_action.concept in opt_acts
             if not is_opt:
@@ -451,6 +470,18 @@ def test_dkt_single(dgraph, horizon, n_rollouts, model):
         #print('Next state: {}'.format(str(new_root.state)))
     return sim.student.knowledge
 
+def test_dkt_chunk(n_trajectories, dgraph, learn_prob, model_id, horizon, n_rollouts):
+    '''
+    Runs a bunch of trajectories and returns the avg posttest score.
+    For parallelization to run in a separate thread/process.
+    '''
+    model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    acc = 0.0
+    for i in xrange(n_trajectories):
+        k = test_dkt_single(dgraph, learn_prob, horizon, n_rollouts, model)
+        acc += np.mean(k)
+    return acc
+
 def test_dkt():
     '''
     Test DKT+MCTS
@@ -458,9 +489,12 @@ def test_dkt():
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     n_concepts = 5
+    learn_prob = 0.5
     horizon = 10
     n_rollouts = 50
     n_trajectories = 100
+    n_jobs = 8
+    traj_per_job =  n_trajectories // n_jobs
     
     random.seed()
     
@@ -468,19 +502,18 @@ def test_dkt():
     model_id = 'test_model_small'
     #model_id = 'test_model_mid'
     #model_id = 'test_model'
-    model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    
     
     print('Testing model: {}'.format(model_id))
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
     
-    avg = 0.0
-    for i in xrange(n_trajectories):
-        k = test_dkt_single(dgraph, horizon, n_rollouts, model)
-        avg += np.mean(k)
-    avg = avg / n_trajectories
+    student = st.Student(p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
     
-    test_data = dg.generate_data(dgraph, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, learn_prob, model_id, horizon, n_rollouts) for _ in range(n_jobs))
+    avg = sum(accs) / (n_jobs * traj_per_job)
+    
+    test_data = dg.generate_data(dgraph, student=student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Average posttest true: {}'.format(expected_reward(test_data)))
     print('Average posttest mcts: {}'.format(avg))
 
