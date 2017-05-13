@@ -685,16 +685,16 @@ def test_dkt():
     use_greedy = True
     learn_prob = 0.15
     horizon = 40
-    n_rollouts = 50
-    n_trajectories = 100
+    n_rollouts = 150
+    n_trajectories = 1000
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
     
     random.seed()
     
     dgraph = create_custom_dependency()
-    model_id = 'test_model_small'
-    #model_id = 'test_model_mid'
+    #model_id = 'test_model_small'
+    model_id = 'test_model_mid'
     #model_id = 'test_model'
     
     
