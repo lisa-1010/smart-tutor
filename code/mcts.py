@@ -334,17 +334,17 @@ def test_student_exact_single(dgraph, horizon, n_rollouts):
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.monte_carlo)
     
-    root = StateNode(None, StudentExactState(model, sim, 1, horizon))
+    root = StateNode(None, StudentExactState(model, sim, 1, horizon)) # create root node of the tree, 1 is the step.
     for i in range(horizon):
         #print('Step {}'.format(i))
-        best_action = uct(root, n=n_rollouts)
+        best_action = uct(root, n=n_rollouts) # state action object
         #print('Current state: {}'.format(str(root.state)))
         #print(best_action.concept)
         
         # debug check for whether action is optimal
         if True:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action.concept in opt_acts
+            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge) # list of current optimal actions,
+            is_opt = best_action.concept in opt_acts # check if predicted action is optimal
             if not is_opt:
                 print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
                 # now let's print out even more debugging information
@@ -352,7 +352,7 @@ def test_student_exact_single(dgraph, horizon, n_rollouts):
                 #return None
         
         # act in the real environment
-        new_root = root.children[best_action].sample_state(real_world=True)
+        new_root = root.children[best_action].sample_state(real_world=True) # children of root action nodes, real_world=true advances simulator
         new_root.parent = None # cutoff the rest of the tree
         root = new_root
         #print('Next state: {}'.format(str(new_root.state)))
@@ -368,6 +368,7 @@ def expected_reward(data):
         avg += np.mean(data[i][-1][2])
     return avg / len(data)
 
+
 def percent_complete(data):
     '''
     :param data: output from generate_data
@@ -378,6 +379,7 @@ def percent_complete(data):
         if int(np.sum(data[i][-1][2])) == data[i][-1][2].shape[0]:
             count += 1
     return count / len(data)
+
 
 def test_student_exact():
     '''
@@ -409,7 +411,7 @@ def test_student_exact():
 
 def test_dkt_single(dgraph, horizon, n_rollouts, model):
     '''
-    Performs a single trajectory with MCTS and returns the final true student knowlegde.
+    Performs a single trajectory with MCTS and returns the final true student knowledge.
     '''
     n_concepts = dgraph.n
     
@@ -425,7 +427,7 @@ def test_dkt_single(dgraph, horizon, n_rollouts, model):
     #rollout_policy = default_policies.immediate_reward
     rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
-               backups.monte_carlo)
+               backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
     
     root = StateNode(None, DKTState(model, sim, 1, horizon))
     for i in range(horizon):
@@ -458,16 +460,16 @@ def test_dkt():
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     n_concepts = 5
-    horizon = 10
+    horizon = 10 # how long we are testing for
     n_rollouts = 50
-    n_trajectories = 100
+    n_trajectories = 100 # number of trajectories used for testing
     
     random.seed()
     
     dgraph = create_custom_dependency()
-    model_id = 'test_model_small'
-    #model_id = 'test_model_mid'
-    #model_id = 'test_model'
+    model_id = 'test_model_small' # 5 hidden units
+    #model_id = 'test_model_mid' # 10 hidden units
+    #model_id = 'test_model' # 16 hidden units # 16 hidden units
     model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
     
     print('Testing model: {}'.format(model_id))
@@ -476,8 +478,8 @@ def test_dkt():
     
     avg = 0.0
     for i in xrange(n_trajectories):
-        k = test_dkt_single(dgraph, horizon, n_rollouts, model)
-        avg += np.mean(k)
+        k = test_dkt_single(dgraph, horizon, n_rollouts, model) # samples single trajectory, k is the student's knowledge at the end
+        avg += np.mean(k) # np.mean(k) computes average if student's knowledge to get score
     avg = avg / n_trajectories
     
     test_data = dg.generate_data(dgraph, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)

@@ -9,6 +9,26 @@ ENV_NAME = 'CartPole-v0'
 NUM_TEST_TRIALS = 100
 
 
+
+class EnvWrapper(object):
+    """
+    Wraps the Environment class from gym, so we can make environments partially observable.
+    """
+    def __init__(self, env_name, partial=False):
+        # if not partial:
+        self.env = gym.make(env_name)
+
+    def step(self, action):
+        next_state, reward, done, info = self.env.step(action)
+        if partial:
+            if env_name == 'InvertedPendulum-v1':
+                # TODO: hide the velocity element of the state
+                next_state = make_partial(next_state)
+            else:
+                "env cannot be made partial yet"
+        return next_state, reward, done, info
+
+
 class Pipeline(object):
     def __init__(self, env_name='InvertedPendulum-v1'):
         self.env = gym.make(env_name)
