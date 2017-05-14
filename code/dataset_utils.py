@@ -32,6 +32,54 @@ def load_data(filename=None):
     return data
 
 
+def preprocess_data_for_dqn(data, reward_model="sparse"):
+    """
+    Creates n_students traces of (s,a,r,s') tuples which can be loaded into the experience replay buffer.
+    Each student yields one trace
+    :param data:
+    :param reward_model: "sparse" or "dense".
+    If "sparse", then reward = percentage of skills learned at last timestep, 0 everywhere else
+    If "dense", reward = percentage of skills learned at every timestep
+    :return:
+    """
+    n_students = len(data)
+    n_timesteps = len(data[0])
+    exer = data[0][0][0]
+    n_concepts = len(exer)
+
+    all_traces = []
+    for i in xrange(n_students):
+        trace = []
+        for t in xrange(n_timesteps - 1):
+            cur_sample = data[i][t]
+            next_sample = data[i][t + 1]
+            exer, perf, knowl = cur_sample
+            next_exer, next_perf, next_knowl = next_sample
+            next_exer_ix = np.argmax(next_exer)
+
+            s = np.zeros(2 * len(exer))
+            if perf == 1:
+                s[:len(exer)] = exer
+            else:
+                s[len(exer):] = exer
+
+            a = next_exer_ix
+            r = 0.0
+            if reward_model == "dense" or (reward_model == "sparse" and t == n_timesteps - 2):
+                # t = n_timesteps - 2 is last timestep we are considering, since next_knowl is from t+1
+                r = np.mean(next_knowl)
+
+            sp = np.zeros(2 * len(next_exer))
+            if next_perf == 1:
+                sp[:len(next_exer)] = next_exer
+            else:
+                sp[len(exer):] = next_exer
+
+            trace.append((s,a,r,sp))
+        all_traces.append(trace)
+    return all_traces
+
+
 def preprocess_data_for_rnn(data):
     n_students = len(data)
     n_timesteps = len(data[0])
