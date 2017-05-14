@@ -78,7 +78,7 @@ def choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=Fals
     return concepts
 
 
-def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
+def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
     '''
     :param n: number of concepts; if None use N_CONCEPTS
     :param concept_tree: Concept dependency graph
@@ -94,9 +94,14 @@ def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial
     Note that this array will have length seqlen, inclusive
     '''
     n_concepts = concept_tree.n
-    initial_knowledge = np.zeros((n_concepts,))
-    initial_knowledge[0] = 1
-    s = Student(initial_knowledge=initial_knowledge)
+    if initial_knowledge is None:
+        initial_knowledge = np.zeros((n_concepts,))
+        initial_knowledge[0] = 1
+    if student is None:
+        s = Student()
+    else:
+        s = student
+    s.knowledge = initial_knowledge
 
     # if not exercise_seq and policy == 'expert':
     #     return _generate_student_sample_with_expert_policy(student=s, seqlen=seqlen, verbose=verbose)
@@ -144,7 +149,7 @@ def generate_student_sample(concept_tree, seqlen=100, exercise_seq=None, initial
     return student_sample
 
 
-def generate_data(concept_tree, n_students=100, seqlen=100, policy='modulo', filename=None, verbose=False):
+def generate_data(concept_tree, student=None, n_students=100, seqlen=100, policy='modulo', filename=None, verbose=False):
     """
     :param concept_tree: Concept dependency graph
     :param n_students: number of students / samples to generate data for
@@ -160,7 +165,7 @@ def generate_data(concept_tree, n_students=100, seqlen=100, policy='modulo', fil
     for i in xrange(n_students):
         if verbose:
             print ("Creating sample for {}th student".format(i))
-        student_sample = generate_student_sample(concept_tree, seqlen=seqlen, exercise_seq=None, initial_knowledge=None,
+        student_sample = generate_student_sample(concept_tree, student=student, seqlen=seqlen, exercise_seq=None, initial_knowledge=None,
                                                  policy=policy, verbose=verbose)
         data.append(student_sample)
     if filename:
