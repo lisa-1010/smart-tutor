@@ -40,7 +40,23 @@ class Student(object):
             self.knowledge = initial_knowledge
         else:
             self.knowledge = np.zeros((n_concepts,))
-
+    
+    def reset(self):
+        '''
+        Reset to initial condition so that we can start simulating from the beginning again.
+        '''
+        self.knowledge = np.zeros(self.knowledge.shape[0])
+    
+    def copy(self):
+        '''
+        Copies this generator.
+        '''
+        new_student = Student()
+        new_student.p_trans_satisfied = self.p_trans_satisfied
+        new_student.p_trans_not_satisfied = self.p_trans_not_satisfied
+        new_student.p_get_ex_correct_if_concepts_learned = self.p_get_ex_correct_if_concepts_learned
+        new_student.knowledge = np.copy(self.knowledge)
+        return new_student
 
     def do_exercise(self, concept_tree, ex):
         '''
@@ -84,3 +100,68 @@ class Student(object):
         return True
 
     # END OF class Student
+
+
+class Student2(object):
+    '''
+    Special Deterministic Student.
+    Instead of a probability of mastering a skill when prereqs are fulfilled, always need exactly two tries.
+    This means the first try is always a fail, and second try is always a success.
+    Deterministic observations still.
+    '''
+    def __init__(self, n_concepts):
+        self.knowledge = np.zeros((n_concepts,))
+        self.visited = np.zeros((n_concepts,)).astype(np.int)
+
+    def reset(self):
+        self.knowledge = np.zeros(self.knowledge.shape)
+        self.visited = np.zeros(self.knowledge.shape).astype(np.int)
+
+    def copy(self):
+        '''
+        Copies this generator.
+        '''
+        new_student = Student2(1)
+        new_student.knowledge = np.copy(self.knowledge)
+        new_student.visited = np.copy(self.visited)
+        return new_student
+    
+    def do_exercise(self, concept_tree, ex):
+        '''
+        Simulates solving the provided exercise.
+        :param ex: an Exercise object.
+        :return: Returns 1 if student solved it correctly, 0 otherwise.
+        '''
+        if self.fulfilled_prereqs(concept_tree, ex.concepts):
+            for c in xrange(len(ex.concepts)):
+                if ex.concepts[c] == 1:
+                    # has been visited before?
+                    if self.visited[c] >= 1:
+                        # if yes, then this is second time visited so yes mastery
+                        self.knowledge[c] = 1
+                    # concept has been visited
+                    self.visited[c] = 1                
+        return self.learned_all_concepts_in_ex(ex.concepts)
+
+
+    def fulfilled_prereqs(self, concept_tree, concepts):
+        '''
+        for each concept tested in the exercise, check if all prereqs are fulfilled.
+        if prereqs for at least one concept are not fulfilled, then function returns False.
+        :return: bool
+        '''
+        for i in xrange(len(concepts)):
+            c = concepts[i]
+            if c == 1:
+                prereqs = concept_tree.get_prereqs(i)
+                if np.sum(np.multiply(self.knowledge, prereqs)) != np.sum(prereqs):
+                    return False
+        return True
+
+    def learned_all_concepts_in_ex(self, concepts):
+        for c in xrange(len(concepts)):
+            if concepts[c] == 1 and self.knowledge[c] == 0:
+                return False
+        return True
+
+    # END OF class Student2

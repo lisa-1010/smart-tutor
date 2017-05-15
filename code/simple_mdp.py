@@ -168,22 +168,28 @@ def percent_all_seen(data):
 
 if __name__ == '__main__':
     # test out the model
-    dgraph = create_custom_dependency()
+    n_concepts = 4
+    horizon = 7
+    
+    #dgraph = create_custom_dependency()
+    
+    dgraph = ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
     
     # custom student
-    student = Student(p_trans_satisfied=0.15, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    #student = Student(n=n_concepts,p_trans_satisfied=0.15, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    student2 = Student2(n_concepts)
     
-    data = generate_data(dgraph, student=student, n_students=100000, seqlen=4, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, student=student2, n_students=100000, seqlen=horizon, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
     print('Percent of all seen: {}'.format(percent_all_seen(data)))
     # for seqlen=5 expert=0.68
     # seqlen=3 seems to be the point where there should be enough information to generalize the optimal policy
     
-    smdp = SimpleMDP()
-    smdp.train(data)
-    #print(smdp.transition)
-    smdp.vi(0.95)
+    #smdp = SimpleMDP()
+    #smdp.train(data)
+    #smdp.vi(0.95)
     '''
     What should be the optimal policy?
     00000
@@ -220,7 +226,7 @@ if __name__ == '__main__':
     11111
     The states left blank are impossible states
     '''
-    for i,acts in [(1,[1,2]),(3,[2,3]),(5,[1,4]),(7,[3,4]),(11,[2]),(15,[4]),(21,[1]),(23,[3])]:
-        policy_a = np.argmax(smdp.q[i,:])
-        print('{} {}'.format(policy_a in acts, smdp.q[i,:]))
+    #for i,acts in [(1,[1,2]),(3,[2,3]),(5,[1,4]),(7,[3,4]),(11,[2]),(15,[4]),(21,[1]),(23,[3])]:
+    #    policy_a = np.argmax(smdp.q[i,:])
+    #    print('{} {}'.format(policy_a in acts, smdp.q[i,:]))
     

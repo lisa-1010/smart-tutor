@@ -101,12 +101,13 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         s = Student()
     else:
         s = student
+        s.reset() # make sure to reset to intial conditions for this sample
     s.knowledge = initial_knowledge
 
     # if not exercise_seq and policy == 'expert':
     #     return _generate_student_sample_with_expert_policy(student=s, seqlen=seqlen, verbose=verbose)
 
-    if not exercise_seq and policy != 'expert':
+    if not exercise_seq and (policy == 'modulo' or policy == 'random'):
         # for expert policy, we have to choose the next exercise online.
         exercise_seq = []
         for i in xrange(seqlen):
@@ -119,6 +120,28 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
                 concepts[np.random.randint(n_concepts)] = 1
             ex = Exercise(concepts=concepts)
             exercise_seq.append(ex)
+    if not exercise_seq and policy == 'student2':
+        '''
+        Custom behavior policy for student2 domain.
+        Just randomly shuffle almost optimal trajectory
+        '''
+        assert(seqlen == n_concepts * 2 - 1)
+        in_order = list(range(n_concepts))
+        seq1 = in_order + in_order
+        del seq1[-1]
+        seq2 = in_order + in_order
+        del seq2[-2]
+        if np.random.random() < 0.5:
+            seq = seq1
+        else:
+            seq = seq2
+        exercise_seq = []
+        for i in xrange(seqlen):
+            concepts = np.zeros((n_concepts,))
+            concepts[seq[i]] = 1
+            ex = Exercise(concepts=concepts)
+            exercise_seq.append(ex)
+        np.random.shuffle(exercise_seq)
 
     # Go through sequence of exercises and record whether student solved each or not
     student_performance = []
