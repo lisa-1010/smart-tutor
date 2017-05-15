@@ -23,5 +23,11 @@
         "n_hidden": 10,
         "n_inputdim": 10,
         "n_outputdim": 5
+    },
+    "test_model_drqn": {
+        "architecture": "default",
+        "n_hidden": 10,
+        "n_inputdim": 10,
+        "n_outputdim": 5
     }
 }

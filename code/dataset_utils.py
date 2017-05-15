@@ -63,7 +63,7 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
             else:
                 s[len(exer):] = exer
 
-            a = next_exer_ix
+            a = np.array(next_exer)
             r = 0.0
             if reward_model == "dense" or (reward_model == "sparse" and t == n_timesteps - 2):
                 # t = n_timesteps - 2 is last timestep we are considering, since next_knowl is from t+1
@@ -75,7 +75,7 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
             else:
                 sp[len(exer):] = next_exer
 
-            trace.append((s,a,r,sp))
+            trace.append([[s,a,r,sp]])
         all_traces.append(trace)
     return all_traces
 

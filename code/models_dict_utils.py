@@ -44,7 +44,6 @@ def load_all_models_dict():
 
 def create_new_model_dict(n_inputdim, n_hidden, n_outputdim, architecture):
     model_dict = {
-        # 'n_timesteps': n_timesteps,
         'n_inputdim': n_inputdim,
         'n_hidden': n_hidden,
         'n_outputdim': n_outputdim,
