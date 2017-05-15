@@ -70,40 +70,6 @@ def compute_optimal_actions(concept_tree, knowledge):
         # so all actions are optimal
         opt_acts = list(xrange(concept_tree.n))
     return opt_acts
-        
-
-class StudentSim(object):
-    '''
-    A model-based simulator for a student. Maintains its own internal hidden state.
-    This is just a template.
-    '''
-
-    def __init__(self, data):
-        pass
-    
-    def sample_observation(self, action):
-        '''
-        Samples a new observation given an action.
-        '''
-        pass
-    
-    def sample_reward(self, action):
-        '''
-        Samples a new reward given an action.
-        '''
-        pass
-    
-    def advance_simulator(self, action, observation):
-        '''
-        Given next action and observation, advance the internal hidden state of the simulator.
-        '''
-        pass
-    
-    def copy(self):
-        '''
-        Make a copy of the current simulator.
-        '''
-        pass
 
 class StudentExactSim(object):
     '''
@@ -129,9 +95,7 @@ class StudentExactSim(object):
         '''
         Make a copy of the current simulator.
         '''
-        new_knowledge = np.copy(self.student.knowledge)
-        new_student = copy.copy(self.student)
-        new_student.knowledge = new_knowledge
+        new_student = self.student.copy()
         new_copy = StudentExactSim(new_student, self.dgraph)
         return new_copy
 
@@ -249,14 +213,19 @@ class ExactGreedyPolicy(object):
                 new_model = self.model.copy()
                 new_model.advance_simulator(action)
                 avg_reward += np.sum(new_model.student.knowledge)
-            avg_reward /= n_rollouts
+            avg_reward /= 1.0 * n_rollouts
             next_rewards.append(avg_reward)
+        #print('{} next {}'.format(self, next_rewards))
         return argmaxlist(next_rewards)[0]
     
     def advance(self, concept):
         '''
         Advances both the simulator and model.
         '''
+        conceptvec = np.zeros((self.n_concepts,))
+        conceptvec[concept] = 1.0
+        action = StudentAction(concept, conceptvec)
+        
         # first advance the real world simulator
         self.sim.advance_simulator(action)
         
@@ -433,15 +402,15 @@ def debug_visiter(node, data):
     else:
         print('Not action nor state')
 
-def test_student_exact_single(dgraph, learn_prob, horizon, n_rollouts):
+def test_student_exact_single(dgraph, stud, horizon, n_rollouts):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowlegde.
     '''
     n_concepts = dgraph.n
     
     # create the model and simulators
-    student = st.Student(p_trans_satisfied=learn_prob,p_get_ex_correct_if_concepts_learned=1.0)
-    student.knowledge = np.zeros((n_concepts,))
+    student = stud.copy()
+    student.reset()
     student.knowledge[0] = 1 # initialize the first concept to be known
     sim = StudentExactSim(student, dgraph)
     model = sim.copy()
@@ -477,17 +446,17 @@ def test_student_exact_single(dgraph, learn_prob, horizon, n_rollouts):
         #print('Next state: {}'.format(str(new_root.state)))
     return sim.student.knowledge
 
-def test_student_exact_single_greedy(dgraph, learn_prob, horizon, n_rollouts):
+def test_student_exact_single_greedy(dgraph, stud, horizon, n_rollouts):
     '''
     Performs a single trajectory with the greedy 1-step policy and returns the final true student knowlegde.
     '''
     n_concepts = dgraph.n
     
     # create the model and simulators
-    student = st.Student(p_trans_satisfied=learn_prob,p_get_ex_correct_if_concepts_learned=1.0)
-    student.knowledge = np.zeros((n_concepts,))
-    student.knowledge[0] = 1 # initialize the first concept to be known
-    sim = StudentExactSim(student, dgraph)
+    s = stud.copy()
+    s.reset()
+    s.knowledge[0] = 1 # initialize the first concept to be known
+    sim = StudentExactSim(s, dgraph)
     model = sim.copy()
     
     greedy = ExactGreedyPolicy(model, sim)
@@ -498,9 +467,9 @@ def test_student_exact_single_greedy(dgraph, learn_prob, horizon, n_rollouts):
         # debug check for whether action is optimal
         if True:
             opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action.concept in opt_acts
+            is_opt = best_action in opt_acts
             if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
+                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action))
                 # now let's print out even more debugging information
                 #breadth_first_search(root, fnc=debug_visiter)
                 #return None
@@ -510,7 +479,7 @@ def test_student_exact_single_greedy(dgraph, learn_prob, horizon, n_rollouts):
     return sim.student.knowledge
     
 
-def test_student_exact_chunk(n_trajectories, dgraph, learn_prob, horizon, n_rollouts, use_greedy):
+def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollouts, use_greedy):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -519,9 +488,9 @@ def test_student_exact_chunk(n_trajectories, dgraph, learn_prob, horizon, n_roll
     for i in xrange(n_trajectories):
         print('traj i {}'.format(i))
         if use_greedy:
-            k = test_student_exact_single_greedy(dgraph, learn_prob, horizon, n_rollouts)
+            k = test_student_exact_single_greedy(dgraph, student, horizon, n_rollouts)
         else:
-            k = test_student_exact_single(dgraph, learn_prob, horizon, n_rollouts)
+            k = test_student_exact_single(dgraph, student, horizon, n_rollouts)
         acc += np.mean(k)
     return acc
 
@@ -560,39 +529,43 @@ def test_student_exact():
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     use_greedy = False
-    n_concepts = 5
-    learn_prob = 0.15
-    horizon = 40
-    n_rollouts = 100
+    n_concepts = 4
+    learn_prob = 0.5
+    horizon = 7
+    n_rollouts = 50
     n_trajectories = 100
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
     
-    random.seed()
-    np.random.seed()
+    #dgraph = create_custom_dependency()
     
-    dgraph = create_custom_dependency()
-    student = st.Student(p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
     
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_student_exact_chunk)(traj_per_job, dgraph, learn_prob, horizon, n_rollouts, use_greedy) for _ in range(n_jobs))
+    student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    student2 = st.Student2(n_concepts)
+    test_student = student2
+    
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_student_exact_chunk)(traj_per_job, dgraph, test_student, horizon, n_rollouts, use_greedy) for _ in range(n_jobs))
     avg = sum(accs) / (n_jobs * traj_per_job)
     
-    test_data = dg.generate_data(dgraph, student=student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
+    test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Number of jobs {}'.format(n_jobs))
     print('Trajectory per job {}'.format(traj_per_job))
+    print('Use greedy? {}'.format(use_greedy))
     print('Average posttest true: {}'.format(expected_reward(test_data)))
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, learn_prob, horizon, n_rollouts, model):
+def test_dkt_single(dgraph, s, horizon, n_rollouts, model):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
     '''
     n_concepts = dgraph.n
     
     # create the model and simulators
-    student = st.Student(p_trans_satisfied=learn_prob,p_get_ex_correct_if_concepts_learned=1.0)
-    student.knowledge = np.zeros((n_concepts,))
+    student = s.copy()
+    student.reset()
     student.knowledge[0] = 1 # initialize the first concept to be known
     sim = StudentExactSim(student, dgraph)
     
@@ -629,15 +602,15 @@ def test_dkt_single(dgraph, learn_prob, horizon, n_rollouts, model):
     return sim.student.knowledge
 
 
-def test_dkt_single_greedy(dgraph, learn_prob, horizon, model):
+def test_dkt_single_greedy(dgraph, s, horizon, model):
     '''
     Performs a single trajectory with greedy 1-step lookahead and returns the final true student knowlegde.
     '''
     n_concepts = dgraph.n
     
     # create the model and simulators
-    student = st.Student(p_trans_satisfied=learn_prob,p_get_ex_correct_if_concepts_learned=1.0)
-    student.knowledge = np.zeros((n_concepts,))
+    student = s.copy()
+    student.reset()
     student.knowledge[0] = 1 # initialize the first concept to be known
     sim = StudentExactSim(student, dgraph)
     
@@ -663,7 +636,7 @@ def test_dkt_single_greedy(dgraph, learn_prob, horizon, model):
         greedy.advance(best_action)
     return sim.student.knowledge
 
-def test_dkt_chunk(n_trajectories, dgraph, learn_prob, model_id, horizon, n_rollouts, use_greedy):
+def test_dkt_chunk(n_trajectories, dgraph, student, model_id, horizon, n_rollouts, use_greedy):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -673,9 +646,9 @@ def test_dkt_chunk(n_trajectories, dgraph, learn_prob, model_id, horizon, n_roll
     for i in xrange(n_trajectories):
         print('traj i {}'.format(i))
         if not use_greedy:
-            k = test_dkt_single(dgraph, learn_prob, horizon, n_rollouts, model)
+            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model)
         else:
-            k = test_dkt_single_greedy(dgraph, learn_prob, horizon, model)
+            k = test_dkt_single_greedy(dgraph, student, horizon, model)
         acc += np.mean(k)
     return acc
 
@@ -685,39 +658,54 @@ def test_dkt():
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
-    n_concepts = 5
-    use_greedy = True
+    n_concepts = 4
+    use_greedy = False
     learn_prob = 0.15
-    horizon = 40
-    n_rollouts = 150
-    n_trajectories = 1000
+    horizon = 6
+    n_rollouts = 200
+    n_trajectories = 100
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
     
-    random.seed()
+    #dgraph = create_custom_dependency()
     
-    dgraph = create_custom_dependency()
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
+    
+    #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    student2 = st.Student2(n_concepts)
+    test_student = student2
 
     #model_id = 'test_model_small'
-    model_id = 'test_model_mid'
+    #model_id = 'test_model_mid'
     #model_id = 'test_model'
+    
+    model_id = 'test2_model_mid'
 
     print('Testing model: {}'.format(model_id))
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
-
-    student = st.Student(p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
     
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, learn_prob, model_id, horizon, n_rollouts, use_greedy) for _ in range(n_jobs))
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, horizon, n_rollouts, use_greedy) for _ in range(n_jobs))
     avg = sum(accs) / (n_jobs * traj_per_job)
 
     
-    test_data = dg.generate_data(dgraph, student=student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
+    test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Average posttest true: {}'.format(expected_reward(test_data)))
     print('Average posttest mcts: {}'.format(avg))
 
 if __name__ == '__main__':
+    import time
+    starttime = time.time()
+    
+    np.random.seed()
+    random.seed()
+    
+    
     #test_student_exact()
     test_dkt()
+    
+    endtime = time.time()
+    print('Time elapsed {}s'.format(endtime-starttime))
 
 
