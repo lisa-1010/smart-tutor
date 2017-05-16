@@ -115,7 +115,7 @@ def train(drqn_model, session, saver, experience_buffer, gamma=0.99, batch_sz=16
     2. randomly sample a batch of 64 samples
     """
 
-    summary_ops = build_summaries()
+    summary_ops = build_summaries(tf.summary.scalar, tf.summary.merge_all)
     summary_op = summary_ops[-1]
 
 
@@ -133,7 +133,7 @@ def train(drqn_model, session, saver, experience_buffer, gamma=0.99, batch_sz=16
     if load_checkpoint == True:
         print('Loading Model...')
         ckpt = tf.train.get_checkpoint_state(ckpt_path)
-        saver.restore(session, ckpt.model_checkpoint_path)
+        saver.restore(session, ckpt_path)
 
 
     training_steps = int(n_epoch * (experience_buffer.buffer_sz / batch_sz))
