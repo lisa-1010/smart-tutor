@@ -169,7 +169,7 @@ def percent_all_seen(data):
 if __name__ == '__main__':
     # test out the model
     n_concepts = 4
-    horizon = 7
+    horizon = 6
     
     #dgraph = create_custom_dependency()
     
@@ -180,7 +180,7 @@ if __name__ == '__main__':
     #student = Student(n=n_concepts,p_trans_satisfied=0.15, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
     student2 = Student2(n_concepts)
     
-    data = generate_data(dgraph, student=student2, n_students=100000, seqlen=horizon, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, student=student2, n_students=100000, filter_mastery=True, seqlen=horizon, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
     print('Percent of all seen: {}'.format(percent_all_seen(data)))
