@@ -45,6 +45,7 @@ class DRQNModel(object):
 
         :return: Q-values
         """
+        tf.reset_default_graph()
         q_inputs = self.graph_ops["q_inputs"]
         q_values = self.graph_ops["q_values"]
 
@@ -68,6 +69,7 @@ def build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
     :param n_actions equivalent to number of actions
     :return:
     """
+    tf.reset_default_graph()
     inputs = tf.placeholder(tf.float32, [None, n_timesteps, n_inputdim])
     net, hidden_states_1 = tflearn.lstm(inputs, n_hidden, return_seq=True, return_state=True, name="lstm_1")
     q_values = tflearn.lstm(net, n_actions, return_seq=True, activation='linear', name="lstm_2")
@@ -78,49 +80,49 @@ def build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
 def build_tf_graph_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
     tf.reset_default_graph()
     # Create shared deep q network
-    with tf.Session() as session:
-        q_inputs, q_net = build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions)
-        net_params = tf.trainable_variables()
-        q_values = q_net
-        # Define cost and gradient update op
-        a = tf.placeholder("float", [None, n_timesteps, n_actions])
-        y = tf.placeholder("float", [None, n_timesteps])
-        action_q_values = tf.reduce_sum(tf.multiply(q_values, a), reduction_indices=2)  # shape [None, n_timesteps]
-        # compute td cost as mean square error of target q and predicted q
-        cost = tflearn.mean_square(action_q_values, y)
-        optimizer = tf.train.RMSPropOptimizer(learning_rate=0.001)
-        grad_update = optimizer.minimize(cost, var_list=net_params)
+    # with tf.Session() as session:
+    q_inputs, q_net = build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions)
+    net_params = tf.trainable_variables()
+    q_values = q_net
+    # Define cost and gradient update op
+    a = tf.placeholder("float", [None, n_timesteps, n_actions])
+    y = tf.placeholder("float", [None, n_timesteps])
+    action_q_values = tf.reduce_sum(tf.multiply(q_values, a), reduction_indices=2)  # shape [None, n_timesteps]
+    # compute td cost as mean square error of target q and predicted q
+    cost = tflearn.mean_square(action_q_values, y)
+    optimizer = tf.train.RMSPropOptimizer(learning_rate=0.001)
+    grad_update = optimizer.minimize(cost, var_list=net_params)
 
-        # TODO: for now we will use a single Q network. Since we use offline data, there is less of a risk to instability.
-        # # Create shared target network
-        # target_q_inputs, target_q_net = build_drqn(n_actions=n_actions)
-        # # the first len(netparams) items in trainable_variables correspond to dqn
-        # target_net_params = tf.trainable_variables()[len(net_params):]
-        # target_q_values = target_q_net
-        #
-        # # Op for periodically updating target network with online network weights
-        # reset_target_network_params = \
-        #     [target_net_params[i].assign(net_params[i])
-        #      for i in range(len(target_net_params))]
-        # graph_ops = {"q_inputs": q_inputs,
-        #              "q_values": q_values,
-        #              "target_inputs": target_q_inputs,
-        #              "target_q_values": target_q_values,
-        #              "reset_target_network_params": reset_target_network_params,
-        #              "a": a,
-        #              "y": y,
-        #              "grad_update": grad_update}
+    # TODO: for now we will use a single Q network. Since we use offline data, there is less of a risk to instability.
+    # # Create shared target network
+    # target_q_inputs, target_q_net = build_drqn(n_actions=n_actions)
+    # # the first len(netparams) items in trainable_variables correspond to dqn
+    # target_net_params = tf.trainable_variables()[len(net_params):]
+    # target_q_values = target_q_net
+    #
+    # # Op for periodically updating target network with online network weights
+    # reset_target_network_params = \
+    #     [target_net_params[i].assign(net_params[i])
+    #      for i in range(len(target_net_params))]
+    # graph_ops = {"q_inputs": q_inputs,
+    #              "q_values": q_values,
+    #              "target_inputs": target_q_inputs,
+    #              "target_q_values": target_q_values,
+    #              "reset_target_network_params": reset_target_network_params,
+    #              "a": a,
+    #              "y": y,
+    #              "grad_update": grad_update}
 
-        graph_ops = {"q_inputs": q_inputs,
-                     "q_values": q_values,
-                     "a": a,
-                     "y": y,
-                     "grad_update": grad_update}
-        return graph_ops
+    graph_ops = {"q_inputs": q_inputs,
+                 "q_values": q_values,
+                 "a": a,
+                 "y": y,
+                 "grad_update": grad_update}
+    return graph_ops
 
 
 
-def train(dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=16, load_checkpoint=False, ckpt_path=""):
+def train(session, dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=16, load_checkpoint=False, ckpt_path=""):
     """
     Treat our offline data as the experience replay buffer and we only train on "experience"
     Data could be provided with the experience buffer (list of (s,a,r,s') tuples)
@@ -130,57 +132,57 @@ def train(dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=16, load_
 
     # add "Experiences" from our offline data to the experience buffer
     #
-    tf.reset_default_graph()
-    init = tf.global_variables_initializer()
-    with tf.Session() as session:
-        session.run(init)
+    # tf.reset_default_graph()
+
+    # with tf.Session() as session:
+        # session.run(init)
         # saver = tf.train.Saver(max_to_keep=3)
 
-        graph_ops = drqn_model.graph_ops
-        experience_buffer = drqn_model.experience_buffer
+    graph_ops = drqn_model.graph_ops
+    experience_buffer = drqn_model.experience_buffer
 
-        experience_buffer.buffer = dqn_train_data
-        experience_buffer.buffer_sz = len(experience_buffer.buffer)
+    experience_buffer.buffer = dqn_train_data
+    experience_buffer.buffer_sz = len(experience_buffer.buffer)
 
-        # unpack graph_ops
-        q_inputs = graph_ops["q_inputs"]
-        q_values = graph_ops["q_values"]
-        a = graph_ops["a"]
-        y = graph_ops["y"]
-        grad_update = graph_ops["grad_update"]
-
-
-        # if load_checkpoint == True:
-        #     print('Loading Model...')
-        #     ckpt = tf.train.get_checkpoint_state(ckpt_path)
-        #     saver.restore(session, ckpt.model_checkpoint_path)
+    # unpack graph_ops
+    q_inputs = graph_ops["q_inputs"]
+    q_values = graph_ops["q_values"]
+    a = graph_ops["a"]
+    y = graph_ops["y"]
+    grad_update = graph_ops["grad_update"]
 
 
-        training_steps = int(n_epoch * (experience_buffer.buffer_sz / batch_sz))
-        # one training step corresponds to one update to the Q network
+    # if load_checkpoint == True:
+    #     print('Loading Model...')
+    #     ckpt = tf.train.get_checkpoint_state(ckpt_path)
+    #     saver.restore(session, ckpt.model_checkpoint_path)
 
-        for i in xrange(training_steps):
-            # traces is a list/batch of experience traces. Each trace is a tuple of state_action_Data and rewards.
-            train_batch = experience_buffer.sample_in_order(batch_sz)
-            print(train_batch.shape)
 
-            # make sure that batches are over multiple timesteps, should be of shape (batch_sz, n_timesteps, ?)
-            s_batch = stack_batch(train_batch[:,:,0]) # current states
-            a_batch = stack_batch(train_batch[:,:,1]) # actions
-            r_batch = stack_batch(train_batch[:,:,2]) # rewards
-            sp_batch = stack_batch(train_batch[:,:,3])  # next states
-            # Q = q_values.eval(session=session, feed_dict={q_inputs: [s_batch]})
+    training_steps = int(n_epoch * (experience_buffer.buffer_sz / batch_sz))
+    # one training step corresponds to one update to the Q network
 
-            y_batch = r_batch + gamma * q_values.eval(session=session, feed_dict={q_inputs: [sp_batch]})
+    for i in xrange(training_steps):
+        # traces is a list/batch of experience traces. Each trace is a tuple of state_action_Data and rewards.
+        train_batch = experience_buffer.sample_in_order(batch_sz)
 
-            # Update the network with our target values
-            session.run(grad_update, feed_dict={y: y_batch,
-                                                a: a_batch,
-                                                q_inputs: s_batch})
+        # make sure that batches are over multiple timesteps, should be of shape (batch_sz, n_timesteps, ?)
+        s_batch = stack_batch(train_batch[:,:,0]) # current states
+        a_batch = stack_batch(train_batch[:,:,1]) # actions
+        r_batch = stack_batch(train_batch[:,:,2]) # rewards
+        sp_batch = stack_batch(train_batch[:,:,3])  # next states
+        Q = q_values.eval(session=session, feed_dict={q_inputs: s_batch})
+
+        y_batch = r_batch + gamma * np.amax(q_values.eval(session=session, feed_dict={q_inputs: sp_batch}), axis=2)
+
+        # Update the network with our target values
+        session.run(grad_update, feed_dict={y: y_batch,
+                                            a: a_batch,
+                                            q_inputs: s_batch})
 
 
 def stack_batch(batch):
-    return np.array([[np.array(batch[i, j]) for j in xrange(batch.shape[1])] for i in xrange(batch.shape[0])])
+    stacked_batch = np.array([[np.array(batch[i, j]) for j in xrange(batch.shape[1])] for i in xrange(batch.shape[0])])
+    return stacked_batch
 
 class ExperienceBuffer(object):
     """
