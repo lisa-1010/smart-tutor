@@ -61,6 +61,10 @@ class DRQNModel(object):
         return q_values.eval(session=session, feed_dict={q_inputs: [inputs]})
 
 
+
+
+
+
 def build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
     """
     :param n_timesteps:
@@ -69,7 +73,6 @@ def build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
     :param n_actions equivalent to number of actions
     :return:
     """
-    tf.reset_default_graph()
     inputs = tf.placeholder(tf.float32, [None, n_timesteps, n_inputdim])
     net, hidden_states_1 = tflearn.lstm(inputs, n_hidden, return_seq=True, return_state=True, name="lstm_1")
     q_values = tflearn.lstm(net, n_actions, return_seq=True, activation='linear', name="lstm_2")
@@ -80,7 +83,6 @@ def build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
 def build_tf_graph_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
     tf.reset_default_graph()
     # Create shared deep q network
-    # with tf.Session() as session:
     q_inputs, q_net = build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions)
     net_params = tf.trainable_variables()
     q_values = q_net
@@ -90,28 +92,10 @@ def build_tf_graph_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
     action_q_values = tf.reduce_sum(tf.multiply(q_values, a), reduction_indices=2)  # shape [None, n_timesteps]
     # compute td cost as mean square error of target q and predicted q
     cost = tflearn.mean_square(action_q_values, y)
-    optimizer = tf.train.RMSPropOptimizer(learning_rate=0.001)
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
     grad_update = optimizer.minimize(cost, var_list=net_params)
 
     # TODO: for now we will use a single Q network. Since we use offline data, there is less of a risk to instability.
-    # # Create shared target network
-    # target_q_inputs, target_q_net = build_drqn(n_actions=n_actions)
-    # # the first len(netparams) items in trainable_variables correspond to dqn
-    # target_net_params = tf.trainable_variables()[len(net_params):]
-    # target_q_values = target_q_net
-    #
-    # # Op for periodically updating target network with online network weights
-    # reset_target_network_params = \
-    #     [target_net_params[i].assign(net_params[i])
-    #      for i in range(len(target_net_params))]
-    # graph_ops = {"q_inputs": q_inputs,
-    #              "q_values": q_values,
-    #              "target_inputs": target_q_inputs,
-    #              "target_q_values": target_q_values,
-    #              "reset_target_network_params": reset_target_network_params,
-    #              "a": a,
-    #              "y": y,
-    #              "grad_update": grad_update}
 
     graph_ops = {"q_inputs": q_inputs,
                  "q_values": q_values,
@@ -122,7 +106,8 @@ def build_tf_graph_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
 
 
 
-def train(session, dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=16, load_checkpoint=False, ckpt_path=""):
+def train(drqn_model, session, saver, experience_buffer, gamma=0.99, batch_sz=16, n_epoch=16,
+          load_checkpoint=False, checkpoint_interval=1000, ckpt_path=""):
     """
     Treat our offline data as the experience replay buffer and we only train on "experience"
     Data could be provided with the experience buffer (list of (s,a,r,s') tuples)
@@ -130,20 +115,11 @@ def train(session, dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=
     2. randomly sample a batch of 64 samples
     """
 
-    # add "Experiences" from our offline data to the experience buffer
-    #
-    # tf.reset_default_graph()
+    summary_ops = build_summaries()
+    summary_op = summary_ops[-1]
 
-    # with tf.Session() as session:
-        # session.run(init)
-        # saver = tf.train.Saver(max_to_keep=3)
 
     graph_ops = drqn_model.graph_ops
-    experience_buffer = drqn_model.experience_buffer
-
-    experience_buffer.buffer = dqn_train_data
-    experience_buffer.buffer_sz = len(experience_buffer.buffer)
-
     # unpack graph_ops
     q_inputs = graph_ops["q_inputs"]
     q_values = graph_ops["q_values"]
@@ -151,17 +127,20 @@ def train(session, dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=
     y = graph_ops["y"]
     grad_update = graph_ops["grad_update"]
 
+    summary_placeholders, assign_ops, summary_op = summary_ops
 
-    # if load_checkpoint == True:
-    #     print('Loading Model...')
-    #     ckpt = tf.train.get_checkpoint_state(ckpt_path)
-    #     saver.restore(session, ckpt.model_checkpoint_path)
+
+    if load_checkpoint == True:
+        print('Loading Model...')
+        ckpt = tf.train.get_checkpoint_state(ckpt_path)
+        saver.restore(session, ckpt.model_checkpoint_path)
 
 
     training_steps = int(n_epoch * (experience_buffer.buffer_sz / batch_sz))
     # one training step corresponds to one update to the Q network
 
-    for i in xrange(training_steps):
+    for t in xrange(training_steps):
+        print ("Training step: {}".format(t))
         # traces is a list/batch of experience traces. Each trace is a tuple of state_action_Data and rewards.
         train_batch = experience_buffer.sample_in_order(batch_sz)
 
@@ -170,7 +149,6 @@ def train(session, dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=
         a_batch = stack_batch(train_batch[:,:,1]) # actions
         r_batch = stack_batch(train_batch[:,:,2]) # rewards
         sp_batch = stack_batch(train_batch[:,:,3])  # next states
-        Q = q_values.eval(session=session, feed_dict={q_inputs: s_batch})
 
         y_batch = r_batch + gamma * np.amax(q_values.eval(session=session, feed_dict={q_inputs: sp_batch}), axis=2)
 
@@ -179,10 +157,61 @@ def train(session, dqn_train_data, drqn_model, gamma=0.99, batch_sz=16, n_epoch=
                                             a: a_batch,
                                             q_inputs: s_batch})
 
+        # Save model progress
+        if t % checkpoint_interval == 0:
+            saver.save(session, ckpt_path, global_step=t)
+
 
 def stack_batch(batch):
     stacked_batch = np.array([[np.array(batch[i, j]) for j in xrange(batch.shape[1])] for i in xrange(batch.shape[0])])
     return stacked_batch
+
+
+def evaluate(session, graph_ops, saver, ckpt_path, n_timesteps, eval_buffer):
+    saver.restore(session, ckpt_path)
+    print("Restored model weights from ", ckpt_path)
+
+    q_inputs = graph_ops["q_inputs"]
+    q_values = graph_ops["q_values"]
+
+    n_eval_episodes = eval_buffer.buffer_sz
+    for i in xrange(n_eval_episodes):
+        # get initial state
+        ep_reward = 0.0
+        terminal = False
+
+        train_batch = eval_buffer.sample_in_order(batch_sz=1)
+
+        # make sure that batches are over multiple timesteps, should be of shape (batch_sz, n_timesteps, ?)
+        s_batch = stack_batch(train_batch[:, :, 0])  # current states
+        a_batch = stack_batch(train_batch[:, :, 1])  # actions
+        r_batch = stack_batch(train_batch[:, :, 2])  # rewards
+        sp_batch = stack_batch(train_batch[:, :, 3])  # next states
+
+        Q = q_values.eval(session=session, feed_dict={q_inputs: s_batch})
+
+
+
+
+def build_summaries(scalar_summary, merge_all_summaries):
+    episode_reward = tf.Variable(0.)
+    scalar_summary("Reward", episode_reward)
+    episode_ave_max_q = tf.Variable(0.)
+    scalar_summary("Qmax Value", episode_ave_max_q)
+    logged_epsilon = tf.Variable(0.)
+    scalar_summary("Epsilon", logged_epsilon)
+    # Threads shouldn't modify the main graph, so we use placeholders
+    # to assign the value of every summary (instead of using assign method
+    # in every thread, that would keep creating new ops in the graph)
+    summary_vars = [episode_reward, episode_ave_max_q, logged_epsilon]
+    summary_placeholders = [tf.placeholder("float")
+                            for i in range(len(summary_vars))]
+    assign_ops = [summary_vars[i].assign(summary_placeholders[i])
+                  for i in range(len(summary_vars))]
+    summary_op = merge_all_summaries()
+    return summary_placeholders, assign_ops, summary_op
+
+
 
 class ExperienceBuffer(object):
     """
@@ -196,6 +225,7 @@ class ExperienceBuffer(object):
         self.cur_episode_index = 0
         self.max_episode_length = 0
 
+
     def add_episode(self, episode):
         if len(self.buffer) + 1 > self.buffer_sz:
             del self.buffer[0]
@@ -203,9 +233,11 @@ class ExperienceBuffer(object):
         self.max_episode_length = max(self.max_episode_length, len(episode))
         assert (len(self.buffer) <= self.buffer_sz), "buffer too big"
 
+
     def sample(self, batch_sz, trace_length=-1):
         sampled_episodes = random.sample(self.buffer, batch_sz)
         return self._get_traces_from_episodes(sampled_episodes, trace_length)
+
 
     def sample_in_order(self, batch_sz, trace_length=-1):
         """
