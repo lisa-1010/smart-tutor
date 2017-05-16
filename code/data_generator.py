@@ -172,10 +172,11 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
     return student_sample
 
 
-def generate_data(concept_tree, student=None, n_students=100, seqlen=100, policy='modulo', filename=None, verbose=False):
+def generate_data(concept_tree, student=None, filter_mastery=False, n_students=100, seqlen=100, policy='modulo', filename=None, verbose=False):
     """
     :param concept_tree: Concept dependency graph
-    :param n_students: number of students / samples to generate data for
+    :param student: Student environment
+    :param filter_mastery: boolean indicating whether want to remove trajectories that end in full mastery
     :param seqlen: max length of exercises for a student. if student learns all concepts, sequence can be shorter.
     :param policy: which policy to use to generate data. can be 'expert', 'modulo', 'random'
     :param filename: where to store the generated data. If None, will not save to file.
@@ -190,7 +191,12 @@ def generate_data(concept_tree, student=None, n_students=100, seqlen=100, policy
             print ("Creating sample for {}th student".format(i))
         student_sample = generate_student_sample(concept_tree, student=student, seqlen=seqlen, exercise_seq=None, initial_knowledge=None,
                                                  policy=policy, verbose=verbose)
-        data.append(student_sample)
+        if filter_mastery:
+            final_knowledge = student_sample[-1][2]
+            if np.mean(final_knowledge) < 0.999:
+                data.append(student_sample)
+        else:
+            data.append(student_sample)
     if filename:
         pickle.dump(data, open(filename, 'wb+'))
     return data
