@@ -75,7 +75,7 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
             else:
                 sp[len(exer):] = next_exer
 
-            trace.append([[s,a,r,sp]])
+            trace.append([s,a,r,sp])
         all_traces.append(trace)
     return all_traces
 
