@@ -22,10 +22,27 @@ import tensorflow as tf
 import tflearn
 import numpy as np
 import random
+
+
 import utils
+import data_generator as dg
+import student as st
+import exercise as exer
+import dynamics_model_class as dmc
+.
+
+
 import dataset_utils as d_utils
 import models_dict_utils
+
+
+from joblib import Parallel, delayed
+
+
+
 FLAGS = tf.flags.FLAGS
+
+
 
 class DRQNModel(object):
 
@@ -59,10 +76,6 @@ class DRQNModel(object):
             inputs = inputs[:, :self.timesteps, :]
 
         return q_values.eval(session=session, feed_dict={q_inputs: [inputs]})
-
-
-
-
 
 
 def build_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
@@ -106,6 +119,64 @@ def build_tf_graph_drqn(n_timesteps, n_inputdim, n_hidden, n_actions):
     return graph_ops
 
 
+def train(drqn_model, session, saver, experience_buffer, gamma=0.99, batch_sz=16, n_epoch=16,
+          load_checkpoint=False, checkpoint_interval=1000, ckpt_path=""):
+    """
+    Treat our offline data as the experience replay buffer and we only train on "experience"
+    Data could be provided with the experience buffer (list of (s,a,r,s') tuples)
+    1. experience buffer could go through data in order, in chunks of 64
+    2. randomly sample a batch of 64 samples
+    """
+
+
+    summary_ops = build_summaries(tf.summary.scalar, tf.summary.merge_all)
+    summary_op = summary_ops[-1]
+
+    graph_ops = drqn_model.graph_ops
+    # unpack graph_ops
+    q_inputs = graph_ops["q_inputs"]
+    q_values = graph_ops["q_values"]
+    a = graph_ops["a"]
+    y = graph_ops["y"]
+    grad_update = graph_ops["grad_update"]
+
+    summary_placeholders, assign_ops, summary_op = summary_ops
+
+    if load_checkpoint == True:
+        print('Loading Model...')
+        ckpt = tf.train.get_checkpoint_state(ckpt_path)
+        saver.restore(session, ckpt_path)
+
+    training_steps = int(n_epoch * (experience_buffer.buffer_sz / batch_sz))
+    # one training step corresponds to one update to the Q network
+
+    for t in xrange(training_steps):
+        print("Training step: {}".format(t))
+        # traces is a list/batch of experience traces. Each trace is a tuple of state_action_Data and rewards.
+        train_batch = experience_buffer.sample_in_order(batch_sz)
+
+        # make sure that batches are over multiple timesteps, should be of shape (batch_sz, n_timesteps, ?)
+        s_batch = stack_batch(train_batch[:, :, 0])  # current states
+        a_batch = stack_batch(train_batch[:, :, 1])  # actions
+        r_batch = stack_batch(train_batch[:, :, 2])  # rewards
+        sp_batch = stack_batch(train_batch[:, :, 3])  # next states
+
+        y_batch = r_batch + gamma * np.amax(q_values.eval(session=session, feed_dict={q_inputs: sp_batch}), axis=2)
+
+        # Update the network with our target values
+        session.run(grad_update, feed_dict={y: y_batch,
+                                            a: a_batch,
+                                            q_inputs: s_batch})
+
+        # Save model progress
+        if t % checkpoint_interval == 0:
+            saver.save(session, ckpt_path, global_step=t)
+
+
+# next three functions similar, but implemented using tflearn Trainer class.
+# Packed everything a single computation graph, so we have a single train op to optimize.
+# Previously, we had to first compute the target Q value separately and pass it into the graph.
+# Now all data can be passed in together.
 def build_drqn_tflearn(inputs, n_hidden, n_actions, reuse=False):
     """
     :param n_timesteps:
@@ -210,61 +281,6 @@ def train_tflearn(graph_ops, train_buffer, val_buffer,n_epoch=16,
                 val_feed_dicts={q_inputs: s_batch_val, a: a_batch_val, r: r_batch_val, target_inputs: sp_batch_val},
                 n_epoch=n_epoch, snapshot_epoch=True,run_id=run_id)
 
-
-def train(drqn_model, session, saver, experience_buffer, gamma=0.99, batch_sz=16, n_epoch=16,
-          load_checkpoint=False, checkpoint_interval=1000, ckpt_path=""):
-    """
-    Treat our offline data as the experience replay buffer and we only train on "experience"
-    Data could be provided with the experience buffer (list of (s,a,r,s') tuples)
-    1. experience buffer could go through data in order, in chunks of 64
-    2. randomly sample a batch of 64 samples
-    """
-
-    summary_ops = build_summaries(tf.summary.scalar, tf.summary.merge_all)
-    summary_op = summary_ops[-1]
-
-
-    graph_ops = drqn_model.graph_ops
-    # unpack graph_ops
-    q_inputs = graph_ops["q_inputs"]
-    q_values = graph_ops["q_values"]
-    a = graph_ops["a"]
-    y = graph_ops["y"]
-    grad_update = graph_ops["grad_update"]
-
-    summary_placeholders, assign_ops, summary_op = summary_ops
-
-
-    if load_checkpoint == True:
-        print('Loading Model...')
-        ckpt = tf.train.get_checkpoint_state(ckpt_path)
-        saver.restore(session, ckpt_path)
-
-
-    training_steps = int(n_epoch * (experience_buffer.buffer_sz / batch_sz))
-    # one training step corresponds to one update to the Q network
-
-    for t in xrange(training_steps):
-        print ("Training step: {}".format(t))
-        # traces is a list/batch of experience traces. Each trace is a tuple of state_action_Data and rewards.
-        train_batch = experience_buffer.sample_in_order(batch_sz)
-
-        # make sure that batches are over multiple timesteps, should be of shape (batch_sz, n_timesteps, ?)
-        s_batch = stack_batch(train_batch[:,:,0]) # current states
-        a_batch = stack_batch(train_batch[:,:,1]) # actions
-        r_batch = stack_batch(train_batch[:,:,2]) # rewards
-        sp_batch = stack_batch(train_batch[:,:,3])  # next states
-
-        y_batch = r_batch + gamma * np.amax(q_values.eval(session=session, feed_dict={q_inputs: sp_batch}), axis=2)
-
-        # Update the network with our target values
-        session.run(grad_update, feed_dict={y: y_batch,
-                                            a: a_batch,
-                                            q_inputs: s_batch})
-
-        # Save model progress
-        if t % checkpoint_interval == 0:
-            saver.save(session, ckpt_path, global_step=t)
 
 
 def stack_batch(batch):
@@ -385,9 +401,46 @@ class ExperienceBuffer(object):
         return sampled_traces
 
 
-# def main():
 #
+# def test_drqn_single(dgraph, s, horizon, n_rollouts, model):
+#     '''
+#     Performs a single trajectory with MCTS and returns the final true student knowledge.
+#     '''
+#     n_concepts = dgraph.n
 #
+#     # create the model and simulators
+#     student = s.copy()
+#     student.reset()
+#     student.knowledge[0] = 1  # initialize the first concept to be known
+#     sim = StudentExactSim(student, dgraph)
 #
-# if __name__ == "__main__":
-#     main()
+#     # make the model
+#     model = dmc.RnnStudentSim(model)
+#
+#     root = StateNode(None, DKTState(model, sim, 1, horizon))
+#     for i in range(horizon):
+#         # print('Step {}'.format(i))
+#         best_action = uct(root, n=n_rollouts)
+#         # print('Current state: {}'.format(str(root.state)))
+#         # print(best_action.concept)
+# 
+#         # debug check for whether action is optimal
+#         if False:
+#             opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge) # put function code into shared file
+#             is_opt = best_action.concept in opt_acts
+#             if not is_opt:
+#                 print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge,
+#                                                                        best_action.concept))
+#                 # now let's print out even more debugging information
+#                 # breadth_first_search(root, fnc=debug_visiter)
+#                 # return None
+#
+#         # act in the real environment
+#         new_root = root.children[best_action].sample_state(real_world=True)
+#         new_root.parent = None  # cutoff the rest of the tree
+#         root = new_root
+#         # print('Next state: {}'.format(str(new_root.state)))
+#     return sim.student.knowledge
+
+
+
