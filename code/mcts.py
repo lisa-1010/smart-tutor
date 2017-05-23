@@ -11,107 +11,15 @@
 import numpy as np
 import scipy as sp
 
-import copy
-
-import constants
-import data_generator as dg
-import student as st
 import exercise as exer
-import dynamics_model_class as dmc
-
-from simple_mdp import SimpleMDP
-from joblib import Parallel, delayed
 
 from mctslib.graph import *
 from mctslib.mcts import *
 
-import mctslib.tree_policies as tree_policies
-import mctslib.default_policies as default_policies
-import mctslib.backups as backups
+import student as st
 
-# helper functions
-def k2i(knowledge):
-    # converts a knowledge numpy array to a state index
-    ix = 0
-    acc = 1
-    for i in xrange(knowledge.shape[0]):
-        ix += acc * knowledge[i]
-        acc *= 2
-    return int(ix)
+from helpers import * # helper functions
 
-def i2k(ix, n_concepts):
-    # converts a state index to a knowledge numpy array
-    knowledge = np.zeros((n_concepts,))
-    for i in xrange(n_concepts):
-        knowledge[i] = ix % 2
-        ix //= 2
-    return knowledge
-
-def argmaxlist(xs):
-    m = max(xs)
-    return [i for i in xrange(len(xs)) if xs[i] == m]
-
-def compute_optimal_actions(concept_tree, knowledge):
-    """
-    Compute a list of optimal actions (concepts) for the current knowledge.
-    """
-    opt_acts = []
-    for i in xrange(concept_tree.n):
-        if not knowledge[i]:
-            # if student hasn't learned concept yet:
-            # check whether prereqs are fulfilled
-            concepts = np.zeros((concept_tree.n,))
-            concepts[i] = 1
-            if dg.fulfilled_prereqs(concept_tree, knowledge, concepts):
-                # this is one optimal action
-                opt_acts.append(i)
-    if not opt_acts:
-        # if no optimal actions, then it means everything is already learned
-        # so all actions are optimal
-        opt_acts = list(xrange(concept_tree.n))
-    return opt_acts
-
-class StudentExactSim(object):
-    '''
-    A model-based simulator for a student. Maintains its own internal hidden state. This wraps around the true simulator.
-    '''
-
-    def __init__(self, student, dgraph):
-        self.student = student
-        self.dgraph = dgraph
-    
-    def advance_simulator(self, action):
-        '''
-        Given next action, simulate the student.
-        :param action: StudentAction object
-        :return: an observation and reward
-        '''
-        # for now, the reward is a full posttest
-        reward = np.sum(self.student.knowledge)
-        ob = self.student.do_exercise(self.dgraph, exer.Exercise(action.conceptvec))
-        return (ob, reward)
-    
-    def copy(self):
-        '''
-        Make a copy of the current simulator.
-        '''
-        new_student = self.student.copy()
-        new_copy = StudentExactSim(new_student, self.dgraph)
-        return new_copy
-
-class StudentAction(object):
-    '''
-    Represents an action of the tutor in MCTS i.e. a problem to give to the student.
-    '''
-    def __init__(self, concept, conceptvec):
-        self.concept = concept
-        self.conceptvec = conceptvec
-    
-    def __eq__(self, other):
-        return self.concept == other.concept
-
-    def __hash__(self):
-        return self.concept
 
 class StudentExactState(object):
     '''
@@ -135,7 +43,7 @@ class StudentExactState(object):
         for i in range(self.n_concepts):
             concepts = np.zeros((self.n_concepts,))
             concepts[i] = 1
-            self.actions.append(StudentAction(i, concepts))
+            self.actions.append(st.StudentAction(i, concepts))
     
     def perform(self, action):
         # make a copy of the model
@@ -145,7 +53,7 @@ class StudentExactState(object):
         new_model.advance_simulator(action)
         
         # create a new state
-        new_state = StudentExactState(new_model, self.sim, self.step+1, self.horizon)
+        new_state = st.StudentExactState(new_model, self.sim, self.step+1, self.horizon)
         return new_state
     
     def real_world_perform(self, action):
@@ -207,7 +115,7 @@ class ExactGreedyPolicy(object):
             avg_reward = 0.0
             conceptvec = np.zeros((self.n_concepts,))
             conceptvec[a] = 1.0
-            action = StudentAction(a, conceptvec)
+            action = st.StudentAction(a, conceptvec)
             # sample next state and reward
             for i in xrange(n_rollouts):
                 new_model = self.model.copy()
@@ -224,7 +132,7 @@ class ExactGreedyPolicy(object):
         '''
         conceptvec = np.zeros((self.n_concepts,))
         conceptvec[concept] = 1.0
-        action = StudentAction(concept, conceptvec)
+        action = st.StudentAction(concept, conceptvec)
         
         # first advance the real world simulator
         self.sim.advance_simulator(action)
@@ -234,6 +142,7 @@ class ExactGreedyPolicy(object):
     
     def __str__(self):
         return 'K {}'.format(self.model.student.knowledge)
+
 
 class DKTState(object):
     '''
@@ -261,7 +170,7 @@ class DKTState(object):
         for i in range(self.n_concepts):
             concepts = np.zeros((self.n_concepts,))
             concepts[i] = 1
-            self.actions.append(StudentAction(i, concepts))
+            self.actions.append(st.StudentAction(i, concepts))
     
     def perform(self, action):
         '''
@@ -327,6 +236,7 @@ class DKTState(object):
             probs[0] = 1
         return 'K {} Actions {} Obs {}'.format(probs, self.act_hist, self.ob_hist)
 
+
 class DKTGreedyPolicy(object):
     '''
     Implements a 1-step lookahead with the per-step posttest reward signal for planning with the DKT
@@ -359,7 +269,7 @@ class DKTGreedyPolicy(object):
             # action
             conceptvec = np.zeros((self.n_concepts,))
             conceptvec[a] = 1.0
-            action = StudentAction(a, conceptvec)
+            action = st.StudentAction(a, conceptvec)
             # for each observation, weight reward with probability of seeing observation
             new_model = self.model.copy()
             new_model.advance_simulator(action, 1)
@@ -378,7 +288,7 @@ class DKTGreedyPolicy(object):
         '''
         conceptvec = np.zeros((self.n_concepts,))
         conceptvec[concept] = 1.0
-        action = StudentAction(concept, conceptvec)
+        action = st.StudentAction(concept, conceptvec)
         # advance the true student simulator
         (ob, r) = self.sim.advance_simulator(action)
         # advance the model with the true observation
@@ -391,321 +301,3 @@ class DKTGreedyPolicy(object):
             probs = [0] * self.sim.dgraph.n
             probs[0] = 1
         return 'K {}'.format(probs)
-
-def debug_visiter(node, data):
-    print('Curr node id: {} n: {} q: {}'.format(id(node), node.n, node.q))
-    print('Parent id: {}'.format(str(id(node.parent)) if node.parent is not None else 'None'))
-    if isinstance(node, ActionNode):
-        print('Action {}'.format(node.action.concept))
-    elif isinstance(node, StateNode):
-        print('State {} step: {}/{} r: {}'.format(node.state.model.student.knowledge, node.state.step, node.state.horizon, node.reward))
-    else:
-        print('Not action nor state')
-
-def test_student_exact_single(dgraph, stud, horizon, n_rollouts):
-    '''
-    Performs a single trajectory with MCTS and returns the final true student knowlegde.
-    '''
-    n_concepts = dgraph.n
-    
-    # create the model and simulators
-    student = stud.copy()
-    student.reset()
-    student.knowledge[0] = 1 # initialize the first concept to be known
-    sim = StudentExactSim(student, dgraph)
-    model = sim.copy()
-    
-    #rollout_policy = default_policies.immediate_reward
-    rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
-    uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
-               backups.monte_carlo)
-    
-    root = StateNode(None, StudentExactState(model, sim, 1, horizon)) # create root node of the tree, 1 is the step.
-    for i in range(horizon):
-        #print('Step {}'.format(i))
-        best_action = uct(root, n=n_rollouts) # state action object
-        #print('Current state: {}'.format(str(root.state)))
-        #print(best_action.concept)
-        
-        # debug check for whether action is optimal
-
-        if False:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action.concept in opt_acts  # check if predicted action is optimal
-
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
-        
-        # act in the real environment
-        new_root = root.children[best_action].sample_state(real_world=True) # children of root action nodes, real_world=true advances simulator
-        new_root.parent = None # cutoff the rest of the tree
-        root = new_root
-        #print('Next state: {}'.format(str(new_root.state)))
-    return sim.student.knowledge
-
-def test_student_exact_single_greedy(dgraph, stud, horizon, n_rollouts):
-    '''
-    Performs a single trajectory with the greedy 1-step policy and returns the final true student knowlegde.
-    '''
-    n_concepts = dgraph.n
-    
-    # create the model and simulators
-    s = stud.copy()
-    s.reset()
-    s.knowledge[0] = 1 # initialize the first concept to be known
-    sim = StudentExactSim(s, dgraph)
-    model = sim.copy()
-    
-    greedy = ExactGreedyPolicy(model, sim)
-    
-    for i in range(horizon):
-        best_action = greedy.best_greedy_action(n_rollouts)
-        
-        # debug check for whether action is optimal
-        if True:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action in opt_acts
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
-        
-        # act in the real environment
-        greedy.advance(best_action)
-    return sim.student.knowledge
-    
-
-def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollouts, use_greedy):
-    '''
-    Runs a bunch of trajectories and returns the avg posttest score.
-    For parallelization to run in a separate thread/process.
-    '''
-    acc = 0.0
-    for i in xrange(n_trajectories):
-        print('traj i {}'.format(i))
-        if use_greedy:
-            k = test_student_exact_single_greedy(dgraph, student, horizon, n_rollouts)
-        else:
-            k = test_student_exact_single(dgraph, student, horizon, n_rollouts)
-        acc += np.mean(k)
-    return acc
-
-def expected_reward(data):
-    '''
-    :param data: output from generate_data
-    :return: the sample mean of the posttest reward
-    '''
-    avg = 0.0
-    for i in xrange(len(data)):
-        avg += np.mean(data[i][-1][2])
-    return avg / len(data)
-
-
-def percent_complete(data):
-    '''
-    :param data: output from generate_data
-    :return: the percentage of trajectories with perfect posttest
-    '''
-    count = 0.0
-    for i in xrange(len(data)):
-        if int(np.sum(data[i][-1][2])) == data[i][-1][2].shape[0]:
-            count += 1
-    return count / len(data)
-
-
-def test_student_exact():
-    '''
-    MCTS is now working.
-    The number of rollouts required to be optimal grows very fast as a function of the horizon.
-    Still, even if not fully optimal, MCTS is an extremely good approximation.
-    
-    Default student with horizon 10 needs about 50 rollouts is good
-    learn prob 0.15 student with horizon 40 needs about 150 rollouts is good; gets about 0.94 which is 0.02 off from 0.96
-    '''
-    import concept_dependency_graph as cdg
-    from simple_mdp import create_custom_dependency
-    use_greedy = False
-    n_concepts = 4
-    learn_prob = 0.5
-    horizon = 7
-    n_rollouts = 50
-    n_trajectories = 100
-    n_jobs = 8
-    traj_per_job =  n_trajectories // n_jobs
-    
-    #dgraph = create_custom_dependency()
-    
-    dgraph = cdg.ConceptDependencyGraph()
-    dgraph.init_default_tree(n_concepts)
-    
-    student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = st.Student2(n_concepts)
-    test_student = student2
-    
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_student_exact_chunk)(traj_per_job, dgraph, test_student, horizon, n_rollouts, use_greedy) for _ in range(n_jobs))
-    avg = sum(accs) / (n_jobs * traj_per_job)
-    
-    test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
-    print('Number of jobs {}'.format(n_jobs))
-    print('Trajectory per job {}'.format(traj_per_job))
-    print('Use greedy? {}'.format(use_greedy))
-    print('Average posttest true: {}'.format(expected_reward(test_data)))
-    print('Average posttest mcts: {}'.format(avg))
-
-
-def test_dkt_single(dgraph, s, horizon, n_rollouts, model):
-    '''
-    Performs a single trajectory with MCTS and returns the final true student knowledge.
-    '''
-    n_concepts = dgraph.n
-    
-    # create the model and simulators
-    student = s.copy()
-    student.reset()
-    student.knowledge[0] = 1 # initialize the first concept to be known
-    sim = StudentExactSim(student, dgraph)
-    
-    # make the model
-    model = dmc.RnnStudentSim(model)
-    
-    #rollout_policy = default_policies.immediate_reward
-    rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
-    uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
-               backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
-    
-    root = StateNode(None, DKTState(model, sim, 1, horizon))
-    for i in range(horizon):
-        #print('Step {}'.format(i))
-        best_action = uct(root, n=n_rollouts)
-        #print('Current state: {}'.format(str(root.state)))
-        #print(best_action.concept)
-        
-        # debug check for whether action is optimal
-        if False:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action.concept in opt_acts
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
-        
-        # act in the real environment
-        new_root = root.children[best_action].sample_state(real_world=True)
-        new_root.parent = None # cutoff the rest of the tree
-        root = new_root
-        #print('Next state: {}'.format(str(new_root.state)))
-    return sim.student.knowledge
-
-
-def test_dkt_single_greedy(dgraph, s, horizon, model):
-    '''
-    Performs a single trajectory with greedy 1-step lookahead and returns the final true student knowlegde.
-    '''
-    n_concepts = dgraph.n
-    
-    # create the model and simulators
-    student = s.copy()
-    student.reset()
-    student.knowledge[0] = 1 # initialize the first concept to be known
-    sim = StudentExactSim(student, dgraph)
-    
-    # make the model
-    model = dmc.RnnStudentSim(model)
-    
-    greedy = DKTGreedyPolicy(model, sim)
-    
-    for i in range(horizon):
-        best_action = greedy.best_greedy_action()
-        
-        # debug check for whether action is optimal
-        if False:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action in opt_acts
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
-        
-        # act in the real environment
-        greedy.advance(best_action)
-    return sim.student.knowledge
-
-def test_dkt_chunk(n_trajectories, dgraph, student, model_id, horizon, n_rollouts, use_greedy):
-    '''
-    Runs a bunch of trajectories and returns the avg posttest score.
-    For parallelization to run in a separate thread/process.
-    '''
-    model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
-    acc = 0.0
-    for i in xrange(n_trajectories):
-        print('traj i {}'.format(i))
-        if not use_greedy:
-            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model)
-        else:
-            k = test_dkt_single_greedy(dgraph, student, horizon, model)
-        acc += np.mean(k)
-    return acc
-
-def test_dkt():
-    '''
-    Test DKT+MCTS
-    '''
-    import concept_dependency_graph as cdg
-    from simple_mdp import create_custom_dependency
-    n_concepts = 4
-    use_greedy = False
-    learn_prob = 0.15
-    horizon = 6
-    n_rollouts = 200
-    n_trajectories = 100
-    n_jobs = 8
-    traj_per_job =  n_trajectories // n_jobs
-    
-    #dgraph = create_custom_dependency()
-    
-    dgraph = cdg.ConceptDependencyGraph()
-    dgraph.init_default_tree(n_concepts)
-    
-    #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = st.Student2(n_concepts)
-    test_student = student2
-
-    #model_id = 'test_model_small'
-    #model_id = 'test_model_mid'
-    #model_id = 'test_model'
-    
-    model_id = 'test2_model_mid'
-
-    print('Testing model: {}'.format(model_id))
-    print('horizon: {}'.format(horizon))
-    print('rollouts: {}'.format(n_rollouts))
-    
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, horizon, n_rollouts, use_greedy) for _ in range(n_jobs))
-    avg = sum(accs) / (n_jobs * traj_per_job)
-
-    
-    test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
-    print('Average posttest true: {}'.format(expected_reward(test_data)))
-    print('Average posttest mcts: {}'.format(avg))
-
-if __name__ == '__main__':
-    import time
-    starttime = time.time()
-    
-    np.random.seed()
-    random.seed()
-    
-    
-    #test_student_exact()
-    test_dkt()
-    
-    endtime = time.time()
-    print('Time elapsed {}s'.format(endtime-starttime))
-
-

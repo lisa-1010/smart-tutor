@@ -165,3 +165,49 @@ class Student2(object):
         return True
 
     # END OF class Student2
+
+
+
+class StudentExactSim(object):
+    '''
+    A model-based simulator for a student. Maintains its own internal hidden state. This wraps around the true simulator.
+    '''
+
+    def __init__(self, student, dgraph):
+        self.student = student
+        self.dgraph = dgraph
+
+    def advance_simulator(self, action):
+        '''
+        Given next action, simulate the student.
+        :param action: StudentAction object
+        :return: an observation and reward
+        '''
+        # for now, the reward is a full posttest
+        reward = np.sum(self.student.knowledge)
+        ob = self.student.do_exercise(self.dgraph, exer.Exercise(action.conceptvec))
+        return (ob, reward)
+
+    def copy(self):
+        '''
+        Make a copy of the current simulator.
+        '''
+        new_student = self.student.copy()
+        new_copy = StudentExactSim(new_student, self.dgraph)
+        return new_copy
+
+
+
+class StudentAction(object):
+    '''
+    Represents an action of the tutor, i.e. a problem to give to the student.
+    '''
+    def __init__(self, concept, conceptvec):
+        self.concept = concept
+        self.conceptvec = conceptvec
+
+    def __eq__(self, other):
+        return self.concept == other.concept
+
+    def __hash__(self):
+        return self.concept

@@ -172,6 +172,7 @@ class RnnStudentSim(object):
 
             return np.sum(pred[0][t-1]) # action.concept is an index
 
+
     def advance_simulator(self, action, observation):
         '''
         Given next action and observation, advance the internal hidden state of the simulator.
