@@ -10,6 +10,7 @@
 import numpy as np
 import scipy as sp
 
+import time
 import copy
 
 import constants
@@ -326,7 +327,6 @@ def test_dkt():
     print('Average posttest mcts: {}'.format(avg))
 
 if __name__ == '__main__':
-    import time
     starttime = time.time()
 
     np.random.seed()

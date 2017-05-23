@@ -25,7 +25,6 @@ import tensorflow as tf
 from filepaths import *
 from constants import *
 
-from mcts import StudentAction
 
 def load_data(filename=None):
     data = pickle.load(open(filename, 'rb+'))
