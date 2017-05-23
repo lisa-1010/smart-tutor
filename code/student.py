@@ -28,6 +28,7 @@ from collections import defaultdict, deque, Counter
 
 # Custom Modules
 from constants import *
+import exercise as exer
 
 
 class Student(object):
