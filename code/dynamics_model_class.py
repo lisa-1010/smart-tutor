@@ -34,7 +34,7 @@ n_outputdim = 10
 
 class DynamicsModel(object):
 
-    def __init__(self, model_id, timesteps=100, load_checkpoint=False):
+    def __init__(self, model_id, timesteps=100, dropout=0.5, load_checkpoint=False):
         print('Loading RNN dynamics model...')
 
         # if timesteps:
@@ -46,7 +46,8 @@ class DynamicsModel(object):
         self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
                                                                                  n_inputdim=self.model_dict["n_inputdim"],
                                                                                  n_hidden=self.model_dict["n_hidden"],
-                                                                                 n_outputdim=self.model_dict["n_outputdim"])
+                                                                                 n_outputdim=self.model_dict["n_outputdim"],
+                                                                                 dropout=dropout)
 
         tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
         checkpoint_dir = '../checkpoints/' + model_id + '/'
@@ -73,13 +74,12 @@ class DynamicsModel(object):
 
 
     def _build_regression_lstm_net(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
-                                           n_outputdim=n_outputdim):
+                                           n_outputdim=n_outputdim, dropout=0.5):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
-        net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, name="lstm_1")
-        net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, name="lstm_2")
+        net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
+        net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="lstm_2")
         net = tf.stack(net, axis=1)
-        preds = net
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
                                  loss='mean_square')
