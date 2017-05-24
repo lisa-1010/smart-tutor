@@ -42,6 +42,7 @@ FLAGS = tf.flags.FLAGS
 class DRQNModel(object):
     def __init__(self, model_id, timesteps=100):
         tf.reset_default_graph()
+        self.model_id = model_id
         self.timesteps = timesteps
         self.model_dict = models_dict_utils.load_model_dict(model_id)
         self.graph_ops = build_tf_graph_drqn_tflearn(timesteps, self.model_dict["n_inputdim"], self.model_dict["n_hidden"], self.model_dict["n_outputdim"])
@@ -49,7 +50,10 @@ class DRQNModel(object):
         self.trainer = None
 
     def init_evaluator(self, load_ckpt_path=""):
-        q_values = self.graph_ops["q_values"]
+        if load_ckpt_path == "":
+            q_values = self.graph_ops["q_values"]
+            load_ckpt_path = '../checkpoints/' + self.model_id + '/'
+
         checkpoint = tf.train.latest_checkpoint(load_ckpt_path)
         self.evaluator = tflearn.Evaluator(q_values, checkpoint)
 
