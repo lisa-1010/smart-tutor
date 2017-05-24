@@ -49,12 +49,22 @@ class DRQNModel(object):
         self.evaluator = None
         self.trainer = None
 
+        # Directory for storing tensorboard summaries
+        self.tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
+        self.checkpoint_dir = '../checkpoints/' + model_id + '/'
+        self.checkpoint_path = self.checkpoint_dir + '_/'
+
+        utils.check_if_path_exists_or_create(self.tensorboard_dir)
+        utils.check_if_path_exists_or_create(self.checkpoint_dir)
+
+
     def init_evaluator(self, load_ckpt_path=""):
         if load_ckpt_path == "":
-            q_values = self.graph_ops["q_values"]
-            load_ckpt_path = '../checkpoints/' + self.model_id + '/'
+            load_ckpt_path = self.checkpoint_dir
 
         checkpoint = tf.train.latest_checkpoint(load_ckpt_path)
+
+        q_values = self.graph_ops["q_values"]
         self.evaluator = tflearn.Evaluator(q_values, checkpoint)
 
 
@@ -87,8 +97,11 @@ class DRQNModel(object):
             return (actions[:, last_timestep], q_vals[:, last_timestep, :])
         return (actions, q_vals)
 
-    def init_trainer(self, tensorboard_dir="/temp/tflearn/", save_ckpt_path=""):
-
+    def init_trainer(self, tensorboard_dir="", save_ckpt_path=""):
+        if tensorboard_dir == "":
+            tensorboard_dir = self.tensorboard_dir
+        if save_ckpt_path == "":
+            save_ckpt_path = self.checkpoint_path
         train_op = self.graph_ops["train_op"]
 
         self.trainer = tflearn.Trainer(train_ops=train_op,
@@ -107,6 +120,8 @@ class DRQNModel(object):
         1. experience buffer could go through data in order, in chunks of 64
         2. randomly sample a batch of 64 samples
         """
+        if load_ckpt_path == "":
+            load_ckpt_path = self.checkpoint_dir
         # unpack graph_ops
         q_inputs = self.graph_ops["q_inputs"]
         target_inputs = self.graph_ops["target_inputs"]
