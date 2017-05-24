@@ -80,7 +80,6 @@ class DRQNModel(object):
         actions = np.argmax(q_vals, axis=2)
 
         if last_timestep_only:
-            print (last_timestep)
             return (actions[:, last_timestep], q_vals[:, last_timestep, :])
         return (actions, q_vals)
 
