@@ -42,7 +42,8 @@ from mcts import \
     ActionNode, \
     StateNode, \
     DKTState, \
-    StudentExactState
+    StudentExactState, \
+    DENSE,SEMISPARSE,SPARSE
 
 
 
@@ -58,7 +59,7 @@ def debug_visiter(node, data):
 
 
 
-def test_student_exact_single(dgraph, stud, horizon, n_rollouts, sparse_r):
+def test_student_exact_single(dgraph, stud, horizon, n_rollouts, r_type):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowlegde.
     '''
@@ -76,7 +77,7 @@ def test_student_exact_single(dgraph, stud, horizon, n_rollouts, sparse_r):
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.monte_carlo)
 
-    root = StateNode(None, StudentExactState(model, sim, 1, horizon, sparse_r)) # create root node of the tree, 1 is the step.
+    root = StateNode(None, StudentExactState(model, sim, 1, horizon, r_type)) # create root node of the tree, 1 is the step.
     for i in range(horizon):
         #print('Step {}'.format(i))
         best_action = uct(root, n=n_rollouts) # state action object
@@ -135,7 +136,7 @@ def test_student_exact_single_greedy(dgraph, stud, horizon, n_rollouts):
     return sim.student.knowledge
 
 
-def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollouts, use_greedy, sparse_r):
+def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollouts, use_greedy, r_type):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -146,7 +147,7 @@ def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollout
         if use_greedy:
             k = test_student_exact_single_greedy(dgraph, student, horizon, n_rollouts)
         else:
-            k = test_student_exact_single(dgraph, student, horizon, n_rollouts, sparse_r)
+            k = test_student_exact_single(dgraph, student, horizon, n_rollouts, r_type)
         acc += np.mean(k)
     return acc
 
@@ -163,7 +164,7 @@ def test_student_exact():
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     use_greedy = False
-    sparse_r = True # only for non-greedy policies
+    r_type = DENSE
     n_concepts = 4
     learn_prob = 0.5
     horizon = 6
@@ -192,7 +193,7 @@ def test_student_exact():
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, s, horizon, n_rollouts, model, sparse_r):
+def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
     '''
@@ -212,7 +213,7 @@ def test_dkt_single(dgraph, s, horizon, n_rollouts, model, sparse_r):
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
 
-    root = StateNode(None, DKTState(model, sim, 1, horizon, sparse_r))
+    root = StateNode(None, DKTState(model, sim, 1, horizon, r_type))
     for i in range(horizon):
         #print('Step {}'.format(i))
         best_action = uct(root, n=n_rollouts)
@@ -271,7 +272,7 @@ def test_dkt_single_greedy(dgraph, s, horizon, model):
         greedy.advance(best_action)
     return sim.student.knowledge
 
-def test_dkt_chunk(n_trajectories, dgraph, student, model_id, horizon, n_rollouts, use_greedy, sparse_r):
+def test_dkt_chunk(n_trajectories, dgraph, student, model_id, horizon, n_rollouts, use_greedy, r_type):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -279,15 +280,15 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, horizon, n_rollout
     model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
     acc = 0.0
     for i in xrange(n_trajectories):
-        print('traj i {}'.format(i))
+        #print('traj i {}'.format(i))
         if not use_greedy:
-            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model, sparse_r)
+            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type)
         else:
             k = test_dkt_single_greedy(dgraph, student, horizon, model)
         acc += np.mean(k)
     return acc
 
-def test_dkt(model_id, sparse_r):
+def test_dkt(model_id, n_rollouts, n_trajectories, r_type):
     '''
     Test DKT+MCTS
     '''
@@ -298,8 +299,6 @@ def test_dkt(model_id, sparse_r):
     use_greedy = False
     learn_prob = 0.15
     horizon = 6
-    n_rollouts = 50
-    n_trajectories = 100
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
 
@@ -320,7 +319,7 @@ def test_dkt(model_id, sparse_r):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, horizon, n_rollouts, use_greedy, sparse_r) for _ in range(n_jobs))
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, horizon, n_rollouts, use_greedy, r_type) for _ in range(n_jobs))
     avg = sum(accs) / (n_jobs * traj_per_job)
 
 
@@ -329,7 +328,63 @@ def test_dkt(model_id, sparse_r):
     print('Average posttest mcts: {}'.format(avg))
     return avg
 
-def staggered_dkt_training(filename, model_id, seqlen, reps, total_epochs, sig_start, sig_done):
+def staggered_dkt_training(filename, model_id, seqlen, reps, total_epochs, epochs_per_iter, sig_start, sig_done):
+    '''
+    This is supposed to be used in a separate process that trains a DKT epoch by epoch.
+    It waits for the parent process to send an Event signal before each training epoch.
+    It signals the parent to wait until this is done as well, so there are 2-way events.
+    '''
+    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
+    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
+    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
+    
+    for r in xrange(reps):
+        dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=1.0, load_checkpoint=False)
+        for ep in xrange(0,total_epochs,epochs_per_iter):
+            sig_start.wait()
+            sig_start.clear()
+            #print('Training rep {} epoch {}'.format(r, ep))
+            dmodel.train(train_data, n_epoch=epochs_per_iter, load_checkpoint=False)
+            sig_done.set()
+
+def test_dkt_early_stopping():
+    model_id = 'test2_model_small'
+    r_type = DENSE
+    n_rollouts = 50
+    seqlen = 7 # training data parameter
+    filename = 'test2-n100000-l7-random.pickle'
+
+    total_epochs = 5
+    epochs_per_iter = 1
+    reps = 10
+    
+    sig_start = mp.Event()
+    sig_done = mp.Event()
+    training_process = mp.Process(target=staggered_dkt_training,
+                                  args=(filename, model_id, seqlen, reps, total_epochs, epochs_per_iter, sig_start, sig_done))
+    
+    scores = np.zeros((reps,total_epochs))
+    
+    training_process.start()
+    for r in xrange(reps):
+        for ep in xrange(0,total_epochs,epochs_per_iter):
+            print('--------------------------------------------------------')
+            print('Rep {} Epoch {}'.format(r+1, ep+epochs_per_iter))
+            print('--------------------------------------------------------')
+            sig_start.set() # signal the training to perform one epoch
+            sig_done.wait() # wait for training to finish
+            sig_done.clear() # finished training
+            
+            # now compute the policy estimate
+            scores[r,ep] = test_dkt(model_id, n_rollouts, sparse_r)
+    
+    for r in xrange(reps):
+        lst = []
+        for ep in xrange(0,total_epochs,epochs_per_iter):
+            lst.append(scores[r,ep])
+        print(lst)
+
+def dkt_training(filename, model_id, seqlen, n_epoch):
     '''
     This is supposed to be used in a separate process that trains a DKT epoch by epoch.
     It waits for the parent process to send an Event signal before each training epoch.
@@ -340,45 +395,23 @@ def staggered_dkt_training(filename, model_id, seqlen, reps, total_epochs, sig_s
     train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
     
     dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=1.0, load_checkpoint=False)
-    
-    for r in xrange(reps):
-        for ep in xrange(total_epochs):
-            sig_start.wait()
-            sig_start.clear()
-            #print('Training rep {} epoch {}'.format(r, ep))
-            dmodel.train(train_data, n_epoch=1, load_checkpoint=False)
-            sig_done.set()
+    dmodel.train(train_data, n_epoch=n_epoch, load_checkpoint=False)
 
-def test_dkt_early_stopping():
+def find_good_model():
     model_id = 'test2_model_small'
-    sparse_r = True
+    r_type = DENSE
+    n_rollouts = 50
     seqlen = 7 # training data parameter
     filename = 'test2-n100000-l7-random.pickle'
-
-    total_epochs = 20
-    reps = 1
+    n_epochs = 3
     
-    sig_start = mp.Event()
-    sig_done = mp.Event()
-    training_process = mp.Process(target=staggered_dkt_training,
-                                  args=(filename, model_id, seqlen, reps, total_epochs, sig_start, sig_done))
-    
-    scores = np.zeros((reps,total_epochs))
-    
+    training_process = mp.Process(target=dkt_training,args=(filename, model_id, seqlen, n_epochs))
     training_process.start()
-    for r in xrange(reps):
-        for ep in xrange(total_epochs):
-            print('--------------------------------------------------------')
-            print('Rep {} Epoch {}'.format(r+1, ep+1))
-            print('--------------------------------------------------------')
-            sig_start.set() # signal the training to perform one epoch
-            sig_done.wait() # wait for training to finish
-            sig_done.clear() # finished training
-            
-            # now compute the policy estimate
-            scores[r,ep] = test_dkt(model_id, sparse_r)
+    training_process.join()
     
-    print(scores)
+    # now compute the policy estimate
+    score = test_dkt(model_id, n_rollouts, sparse_r)
+    print(score)
 
 if __name__ == '__main__':
     starttime = time.time()
@@ -387,12 +420,15 @@ if __name__ == '__main__':
     random.seed()
 
     model_id = 'test2_model_small'
-    sparse_r = True
+    r_type = SPARSE
+    n_rollouts = 100
+    n_trajectories = 500
     
     #test_student_exact()
-    #test_dkt(model_id, sparse_r)
+    test_dkt(model_id, n_rollouts, n_trajectories, r_type)
     
-    test_dkt_early_stopping()
+    #test_dkt_early_stopping()
+    #find_good_model()
 
     endtime = time.time()
     print('Time elapsed {}s'.format(endtime-starttime))

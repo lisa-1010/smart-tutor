@@ -156,23 +156,6 @@ class RnnStudentSim(object):
             # observation is a probability
             return prob_success_action
 
-
-    def sample_reward(self):
-        """
-        Does an approximate posttest i.e. sum of current belief
-        :return:
-        """
-        if not self.sequence:
-            # assume starts with [1 0 0 0 ...] knowledge
-            return 1.0
-        else:
-            rnn_input_sequence = np.expand_dims(np.array(self.sequence), axis=0)
-            pred = self.model.predict(rnn_input_sequence)
-            t = len(self.sequence)
-
-            return np.sum(pred[0][t-1]) # action.concept is an index
-
-
     def advance_simulator(self, action, observation):
         '''
         Given next action and observation, advance the internal hidden state of the simulator.
