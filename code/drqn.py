@@ -56,6 +56,7 @@ class DRQNModel(object):
 
         utils.check_if_path_exists_or_create(self.tensorboard_dir)
         utils.check_if_path_exists_or_create(self.checkpoint_dir)
+        print ("Loaded model {}".format(model_id))
 
 
     def init_evaluator(self, load_ckpt_path=""):
@@ -131,7 +132,7 @@ class DRQNModel(object):
 
         if load_checkpoint:
             checkpoint = tf.train.latest_checkpoint(load_ckpt_path)  # can be none of no checkpoint exists
-            print("Checkpoint filename: " + checkpoint)
+            print("Checkpoint filename: {}".format(checkpoint))
             if checkpoint:
                 self.trainer.restore(checkpoint, verbose=True)
                 print('Checkpoint loaded.')
