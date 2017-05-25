@@ -83,7 +83,7 @@ def test_drqn_chunk(n_trajectories, dgraph, student, model_id, horizon):
     return acc
 
 
-def test_drqn(model_id=""):
+def test_drqn(model_id="", parallel=False):
     '''
     Test DRQN
     '''
@@ -108,9 +108,11 @@ def test_drqn(model_id=""):
     print('Testing model: {}'.format(model_id))
     print('horizon: {}'.format(horizon))
 
-    # accs = Parallel(n_jobs=n_jobs)(delayed(test_drqn_chunk)(traj_per_job, dgraph, student, model_id, horizon) for _ in range(n_jobs))
-    # avg = sum(accs) / (n_jobs)
-    avg = test_drqn_chunk(n_trajectories, dgraph, student, model_id, horizon)
+    if parallel:
+        accs = Parallel(n_jobs=n_jobs)(delayed(test_drqn_chunk)(traj_per_job, dgraph, student, model_id, horizon) for _ in range(n_jobs))
+        avg = sum(accs) / (n_jobs)
+    else:
+        avg = test_drqn_chunk(n_trajectories, dgraph, student, model_id, horizon)
 
     test_data = dg.generate_data(dgraph, student=student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Average posttest true: {}'.format(expected_reward(test_data)))
