@@ -25,7 +25,7 @@ class StudentExactState(object):
     '''
     The "state" to be used in MCTS. We use the exact student knowledge as the state so this is an MDP
     '''
-    def __init__(self, model, sim, step, horizon):
+    def __init__(self, model, sim, step, horizon, sparse_r):
         '''
         :param model: StudentExactSim for the model
         :param sim: StudentExactSim for the real world
@@ -38,6 +38,7 @@ class StudentExactState(object):
         self.step = step
         self.horizon = horizon
         self.n_concepts = model.student.knowledge.shape[0]
+        self.sparse_r=sparse_r
         
         self.actions = []
         for i in range(self.n_concepts):
@@ -53,7 +54,7 @@ class StudentExactState(object):
         new_model.advance_simulator(action)
         
         # create a new state
-        new_state = st.StudentExactState(new_model, self.sim, self.step+1, self.horizon)
+        new_state = StudentExactState(new_model, self.sim, self.step+1, self.horizon, self.sparse_r)
         return new_state
     
     def real_world_perform(self, action):
@@ -64,14 +65,14 @@ class StudentExactState(object):
         new_model = self.sim.copy()
         
         # use that to create the new state
-        new_state = StudentExactState(new_model, self.sim, self.step+1, self.horizon)
+        new_state = StudentExactState(new_model, self.sim, self.step+1, self.horizon, self.sparse_r)
         return new_state
     
     def reward(self):
         # for now, just use the model knowledge state for a full posttest at the end
         #print('Step {} of {} state {}'.format(self.step, self.horizon, self.model.student.knowledge))
         r = np.sum(self.model.student.knowledge)
-        if self.step > self.horizon or True: # toggle between reward every step or only at the end
+        if self.step > self.horizon or (not self.sparse_r): # toggle between reward every step or only at the end
             return r
         else:
             return 0
@@ -148,7 +149,7 @@ class DKTState(object):
     '''
     The belief state to be used in MCTS, implemented using a DKT.
     '''
-    def __init__(self, model, sim, step, horizon, act_hist=[], ob_hist=[]):
+    def __init__(self, model, sim, step, horizon, sparse_r, act_hist=[], ob_hist=[]):
         '''
         :param model: RnnStudentSim object
         :param sim: StudentExactSim object
@@ -165,6 +166,7 @@ class DKTState(object):
         # so all references to it will all be advanced
         self.sim = sim
         self.n_concepts = sim.student.knowledge.shape[0]
+        self.sparse_r = sparse_r
         
         self.actions = []
         for i in range(self.n_concepts):
@@ -187,7 +189,7 @@ class DKTState(object):
         new_model.advance_simulator(action, ob)
         new_act_hist = self.act_hist + [action.concept]
         new_ob_hist = self.ob_hist + [ob]
-        return DKTState(new_model, self.sim, self.step+1, self.horizon, act_hist=new_act_hist, ob_hist=new_ob_hist)
+        return DKTState(new_model, self.sim, self.step+1, self.horizon, self.sparse_r, act_hist=new_act_hist, ob_hist=new_ob_hist)
     
     def real_world_perform(self, action):
         '''
@@ -201,11 +203,11 @@ class DKTState(object):
         new_model.advance_simulator(action, ob)
         new_act_hist = self.act_hist + [action.concept]
         new_ob_hist = self.ob_hist + [ob]
-        return DKTState(new_model, self.sim, self.step+1, self.horizon, act_hist=new_act_hist, ob_hist=new_ob_hist)
+        return DKTState(new_model, self.sim, self.step+1, self.horizon, self.sparse_r, act_hist=new_act_hist, ob_hist=new_ob_hist)
     
     def reward(self):
         r = self.belief.sample_reward()
-        if self.step > self.horizon or True: # toggle between reward every step or only at the end
+        if self.step > self.horizon or (not self.sparse_r): # toggle between reward every step or only at the end
             return r
         else:
             return 0
