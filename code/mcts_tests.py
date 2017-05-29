@@ -9,6 +9,8 @@
 
 import numpy as np
 import scipy as sp
+import tensorflow as tf
+import tflearn
 
 import time
 import copy
@@ -328,61 +330,32 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type):
     print('Average posttest mcts: {}'.format(avg))
     return avg
 
-def staggered_dkt_training(filename, model_id, seqlen, reps, total_epochs, epochs_per_iter, sig_start, sig_done):
+class ExtractCallback(tflearn.callbacks.Callback):
+    def __init__(self):
+        self.tstates = []
+    def on_epoch_end(self, training_state):
+        self.tstates.append(copy.copy(training_state))
+
+def staggered_dkt_training(filename, model_id, seqlen, dropout, reps, total_epochs, epochs_per_iter, sig_start, return_channel):
     '''
     This is supposed to be used in a separate process that trains a DKT epoch by epoch.
     It waits for the parent process to send an Event signal before each training epoch.
-    It signals the parent to wait until this is done as well, so there are 2-way events.
+    It returns an intermediate value when done.
+    It also returns the training/validation losses.
     '''
     data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
     input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
     train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
     
     for r in xrange(reps):
-        dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=1.0, load_checkpoint=False)
+        dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
+        ecall = ExtractCallback()
         for ep in xrange(0,total_epochs,epochs_per_iter):
             sig_start.wait()
             sig_start.clear()
             #print('Training rep {} epoch {}'.format(r, ep))
-            dmodel.train(train_data, n_epoch=epochs_per_iter, load_checkpoint=False)
-            sig_done.set()
-
-def test_dkt_early_stopping():
-    model_id = 'test2_model_small'
-    r_type = DENSE
-    n_rollouts = 50
-    seqlen = 7 # training data parameter
-    filename = 'test2-n100000-l7-random.pickle'
-
-    total_epochs = 5
-    epochs_per_iter = 1
-    reps = 10
-    
-    sig_start = mp.Event()
-    sig_done = mp.Event()
-    training_process = mp.Process(target=staggered_dkt_training,
-                                  args=(filename, model_id, seqlen, reps, total_epochs, epochs_per_iter, sig_start, sig_done))
-    
-    scores = np.zeros((reps,total_epochs))
-    
-    training_process.start()
-    for r in xrange(reps):
-        for ep in xrange(0,total_epochs,epochs_per_iter):
-            print('--------------------------------------------------------')
-            print('Rep {} Epoch {}'.format(r+1, ep+epochs_per_iter))
-            print('--------------------------------------------------------')
-            sig_start.set() # signal the training to perform one epoch
-            sig_done.wait() # wait for training to finish
-            sig_done.clear() # finished training
-            
-            # now compute the policy estimate
-            scores[r,ep] = test_dkt(model_id, n_rollouts, sparse_r)
-    
-    for r in xrange(reps):
-        lst = []
-        for ep in xrange(0,total_epochs,epochs_per_iter):
-            lst.append(scores[r,ep])
-        print(lst)
+            dmodel.train(train_data, n_epoch=epochs_per_iter, callbacks=ecall, load_checkpoint=False)
+            return_channel.send(([c.global_loss for c in ecall.tstates],[c.val_loss for c in ecall.tstates]))
 
 def dkt_training(filename, model_id, seqlen, n_epoch):
     '''
@@ -395,23 +368,65 @@ def dkt_training(filename, model_id, seqlen, n_epoch):
     train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
     
     dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=1.0, load_checkpoint=False)
-    dmodel.train(train_data, n_epoch=n_epoch, load_checkpoint=False)
+    ecall = ExtractCallback()
+    dmodel.train(train_data, n_epoch=n_epoch, callbacks=ecall, load_checkpoint=False)
+    print('Global losses {}'.format([c.global_loss for c in ecall.tstates]))
+    print('Val losses {}'.format([c.val_loss for c in ecall.tstates]))
 
-def find_good_model():
+def test_dkt_early_stopping():
     model_id = 'test2_model_small'
     r_type = DENSE
+    dropout = 0.7
     n_rollouts = 50
+    n_trajectories = 100
     seqlen = 7 # training data parameter
-    filename = 'test2-n100000-l7-random.pickle'
-    n_epochs = 3
+    filename = 'test2-n100000-l7-random-filtered.pickle'
+
+    total_epochs = 12
+    epochs_per_iter = 12
+    reps = 10
     
-    training_process = mp.Process(target=dkt_training,args=(filename, model_id, seqlen, n_epochs))
+    sig_start = mp.Event()
+    (p_ch, c_ch) = mp.Pipe()
+    training_process = mp.Process(target=staggered_dkt_training,
+                                  args=(filename, model_id, seqlen, dropout, reps, total_epochs, epochs_per_iter, sig_start, c_ch))
+    
+    losses = []
+    val_losses = []
+    scores = np.zeros((reps,total_epochs))
+    
     training_process.start()
-    training_process.join()
+    for r in xrange(reps):
+        losses.append(list())
+        val_losses.append(list())
+        for ep in xrange(0,total_epochs,epochs_per_iter):
+            print('--------------------------------------------------------')
+            print('Rep {} Epoch {}'.format(r+1, ep+epochs_per_iter))
+            print('--------------------------------------------------------')
+            sig_start.set() # signal the training to perform one epoch
+            ret_val = p_ch.recv() # wait until its done
+            losses[r].extend(ret_val[0])
+            val_losses[r].extend(ret_val[1])
+            
+            # now compute the policy estimate
+            scores[r,ep] = test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+    training_process.join() # finish up
     
-    # now compute the policy estimate
-    score = test_dkt(model_id, n_rollouts, sparse_r)
-    print(score)
+    score_lst = []
+    for r in xrange(reps):
+        score_lst.append([])
+        for ep in xrange(0,total_epochs,epochs_per_iter):
+            score_lst[r].append(scores[r,ep])
+    with open('output.txt','w') as f:
+        f.write('Losses\n')
+        for r in xrange(reps):
+            f.write('{}\n'.format(losses[r]))
+        f.write('Val Losses\n')
+        for r in xrange(reps):
+            f.write('{}\n'.format(val_losses[r]))
+        f.write('Posttest Scores\n')
+        for r in xrange(reps):
+            f.write('{}\n'.format(score_lst[r]))
 
 if __name__ == '__main__':
     starttime = time.time()
@@ -425,10 +440,9 @@ if __name__ == '__main__':
     n_trajectories = 500
     
     #test_student_exact()
-    test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+    #test_dkt(model_id, n_rollouts, n_trajectories, r_type)
     
-    #test_dkt_early_stopping()
-    #find_good_model()
+    test_dkt_early_stopping()
 
     endtime = time.time()
     print('Time elapsed {}s'.format(endtime-starttime))

@@ -86,7 +86,7 @@ class DynamicsModel(object):
         return net, hidden_states_1, hidden_states_2
 
 
-    def train(self, train_data, n_epoch=64, load_checkpoint=True):
+    def train(self, train_data, n_epoch=64, callbacks=[], load_checkpoint=True):
         """
 
         :param train_data: tuple (input_data, output_mask, output_data)
@@ -98,7 +98,7 @@ class DynamicsModel(object):
         tf.reset_default_graph()
         date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
         run_id = "{}".format(date_time_string)
-        self.model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=0.1, run_id=run_id)
+        self.model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=0.1, run_id=run_id, callbacks=callbacks)
 
 
     def predict(self, input_data):
