@@ -14,6 +14,7 @@ import tflearn
 
 import time
 import copy
+import pickle
 import multiprocessing as mp
 
 import constants
@@ -375,7 +376,7 @@ def dkt_training(filename, model_id, seqlen, n_epoch):
 
 def test_dkt_early_stopping():
     model_id = 'test2_model_small'
-    r_type = DENSE
+    r_type = SEMISPARSE
     dropout = 0.7
     n_rollouts = 50
     n_trajectories = 100
@@ -384,7 +385,7 @@ def test_dkt_early_stopping():
 
     total_epochs = 12
     epochs_per_iter = 12
-    reps = 10
+    reps = 20
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
@@ -428,6 +429,85 @@ def test_dkt_early_stopping():
         for r in xrange(reps):
             f.write('{}\n'.format(score_lst[r]))
 
+
+def dkt_pick_best_initialization():
+    '''
+    Initialize many models and pick based on the training loss.
+    Saves the model to file along with best training loss, so this can be repeated.
+    '''
+    model_id = 'test2_model_small'
+    dropout = 1.0
+    seqlen = 7 # training data parameter
+    filename = 'test2-n100000-l7-random-filtered.pickle'
+    outputstatfile = 'best-loss/{}-dropout{}-{}'.format(model_id, int(dropout * 100), filename)
+    modelfile = 'best-loss/{}-dropout{}-best.chkpt'.format(model_id, int(dropout * 100))
+    print('Output stat file: {}'.format(outputstatfile))
+    print('Output model file: {}'.format(modelfile))
+    
+    # load the saved loss if it exists
+    best_loss = None
+    try:
+        with open(outputstatfile) as f:
+            best_loss = pickle.load(f)
+    except:
+        pass
+
+    reps = 20
+    total_epochs = 1 # which epoch's training loss to use
+    losses = []
+    
+    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
+    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
+    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
+    
+    for r in xrange(reps):
+        dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
+        ecall = ExtractCallback()
+        dmodel.train(train_data, n_epoch=total_epochs, callbacks=ecall, load_checkpoint=False)
+        last_loss = ecall.tstates[-1].global_loss
+        if best_loss is None or last_loss < best_loss:
+            best_loss = last_loss
+            # save the model
+            dmodel.model.save(modelfile)
+        losses.append(last_loss)
+    
+    # save the best loss
+    with open(outputstatfile, 'w') as f:
+        pickle.dump(best_loss,f)
+
+    print('Losses Encountered')
+    print(losses)
+    print('Best loss {}'.format(best_loss))
+    
+def dkt_train_best_initialization():
+    '''
+    Load the model saved in the best model checkpoint, train it some more and test.
+    '''
+    model_id = 'test2_model_small'
+    
+    r_type = SEMISPARSE
+    n_rollouts = 50
+    n_trajectories = 100
+    
+    dropout = 1.0
+    seqlen = 7 # training data parameter
+    filename = 'test2-n100000-l7-random-filtered.pickle'
+    modelfile = '{}-dropout{}-best.chkpt'.format(model_id, int(dropout * 100))
+    print('Model file: {}'.format(modelfile))
+    
+    additional_epochs = 2
+    
+    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
+    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
+    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
+    
+
+    dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
+    # load the model
+    dmodel.model.load(modelfile)
+    ecall = ExtractCallback()
+    dmodel.train(train_data, n_epoch=additional_epochs, callbacks=ecall, load_checkpoint=False)
+
 if __name__ == '__main__':
     starttime = time.time()
 
@@ -435,14 +515,16 @@ if __name__ == '__main__':
     random.seed()
 
     model_id = 'test2_model_small'
-    r_type = SPARSE
+    r_type = SEMISPARSE
     n_rollouts = 100
-    n_trajectories = 500
+    n_trajectories = 100
     
     #test_student_exact()
-    #test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+    test_dkt(model_id, n_rollouts, n_trajectories, r_type)
     
-    test_dkt_early_stopping()
+    #test_dkt_early_stopping()
+    #dkt_pick_best_initialization()
+    #dkt_train_best_initialization()
 
     endtime = time.time()
     print('Time elapsed {}s'.format(endtime-starttime))
