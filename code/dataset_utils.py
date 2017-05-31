@@ -36,7 +36,7 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
     Creates n_students traces of (s,a,r,s') tuples which can be loaded into the experience replay buffer.
     Each student yields one trace
     :param data:
-    :param reward_model: "sparse" or "dense".
+    :param reward_model: "dense", "sparse" or "semisparse".
     If "sparse", then reward = percentage of skills learned at last timestep, 0 everywhere else
     If "dense", reward = percentage of skills learned at every timestep
     :return:
@@ -64,9 +64,14 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
 
             a = np.array(next_exer)
             r = 0.0
-            if reward_model == "dense" or (reward_model == "sparse" and t == n_timesteps - 2):
+            if reward_model == "dense":
                 # t = n_timesteps - 2 is last timestep we are considering, since next_knowl is from t+1
                 r = np.mean(next_knowl)
+            elif reward_model == "sparse" and t == (n_timesteps - 2):
+                r = np.mean(next_knowl)
+            elif reward_model == "semisparse" and t == (n_timesteps - 2):
+                r = np.prod(next_knowl)
+
 
             sp = np.zeros(2 * len(next_exer))
             if next_perf == 1:
