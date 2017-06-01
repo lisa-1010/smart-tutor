@@ -332,12 +332,15 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type):
     return avg
 
 class ExtractCallback(tflearn.callbacks.Callback):
+    '''
+    Used to get the training/validation losses after model.fit.
+    '''
     def __init__(self):
         self.tstates = []
     def on_epoch_end(self, training_state):
         self.tstates.append(copy.copy(training_state))
 
-def staggered_dkt_training(filename, model_id, seqlen, dropout, reps, total_epochs, epochs_per_iter, sig_start, return_channel):
+def staggered_dkt_training(filename, model_id, seqlen, dropout, shuffle, reps, total_epochs, epochs_per_iter, sig_start, return_channel):
     '''
     This is supposed to be used in a separate process that trains a DKT epoch by epoch.
     It waits for the parent process to send an Event signal before each training epoch.
@@ -355,42 +358,30 @@ def staggered_dkt_training(filename, model_id, seqlen, dropout, reps, total_epoc
             sig_start.wait()
             sig_start.clear()
             #print('Training rep {} epoch {}'.format(r, ep))
-            dmodel.train(train_data, n_epoch=epochs_per_iter, callbacks=ecall, load_checkpoint=False)
+            dmodel.train(train_data, n_epoch=epochs_per_iter, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
             return_channel.send(([c.global_loss for c in ecall.tstates],[c.val_loss for c in ecall.tstates]))
 
-def dkt_training(filename, model_id, seqlen, n_epoch):
-    '''
-    This is supposed to be used in a separate process that trains a DKT epoch by epoch.
-    It waits for the parent process to send an Event signal before each training epoch.
-    It signals the parent to wait until this is done as well, so there are 2-way events.
-    '''
-    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
-    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
-    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
-    
-    dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=1.0, load_checkpoint=False)
-    ecall = ExtractCallback()
-    dmodel.train(train_data, n_epoch=n_epoch, callbacks=ecall, load_checkpoint=False)
-    print('Global losses {}'.format([c.global_loss for c in ecall.tstates]))
-    print('Val losses {}'.format([c.val_loss for c in ecall.tstates]))
-
 def test_dkt_early_stopping():
+    '''
+    Performs an experiment where every few epochs of training we test with MCTS, and this is repeated.
+    '''
     model_id = 'test2_model_small'
     r_type = SEMISPARSE
     dropout = 0.7
-    n_rollouts = 50
+    shuffle = False
+    n_rollouts = 100
     n_trajectories = 100
-    seqlen = 7 # training data parameter
-    filename = 'test2-n100000-l7-random-filtered.pickle'
+    seqlen = 6
+    filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
 
-    total_epochs = 12
-    epochs_per_iter = 12
+    total_epochs = 20
+    epochs_per_iter = 2
     reps = 20
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
     training_process = mp.Process(target=staggered_dkt_training,
-                                  args=(filename, model_id, seqlen, dropout, reps, total_epochs, epochs_per_iter, sig_start, c_ch))
+                                  args=(filename, model_id, seqlen, dropout, shuffle, reps, total_epochs, epochs_per_iter, sig_start, c_ch))
     
     losses = []
     val_losses = []
@@ -433,14 +424,15 @@ def test_dkt_early_stopping():
 def dkt_pick_best_initialization():
     '''
     Initialize many models and pick based on the training loss.
-    Saves the model to file along with best training loss, so this can be repeated.
+    Saves the model to a file along with best training loss, so this can be repeated.
     '''
     model_id = 'test2_model_small'
     dropout = 1.0
-    seqlen = 7 # training data parameter
-    filename = 'test2-n100000-l7-random-filtered.pickle'
-    outputstatfile = 'best-loss/{}-dropout{}-{}'.format(model_id, int(dropout * 100), filename)
-    modelfile = 'best-loss/{}-dropout{}-best.chkpt'.format(model_id, int(dropout * 100))
+    shuffle = False
+    seqlen = 6 # training data parameter
+    filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
+    outputstatfile = 'best-loss/{}-dropout{}-shuffle{}-{}'.format(model_id, int(dropout * 100), int(shuffle), filename)
+    modelfile = 'best-loss/{}-dropout{}-shuffle{}-{}-checkpoint'.format(model_id, int(dropout * 100), int(shuffle), filename)
     print('Output stat file: {}'.format(outputstatfile))
     print('Output model file: {}'.format(modelfile))
     
@@ -452,7 +444,7 @@ def dkt_pick_best_initialization():
     except:
         pass
 
-    reps = 20
+    reps = 30
     total_epochs = 1 # which epoch's training loss to use
     losses = []
     
@@ -463,7 +455,7 @@ def dkt_pick_best_initialization():
     for r in xrange(reps):
         dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
         ecall = ExtractCallback()
-        dmodel.train(train_data, n_epoch=total_epochs, callbacks=ecall, load_checkpoint=False)
+        dmodel.train(train_data, n_epoch=total_epochs, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
         last_loss = ecall.tstates[-1].global_loss
         if best_loss is None or last_loss < best_loss:
             best_loss = last_loss
@@ -481,21 +473,18 @@ def dkt_pick_best_initialization():
     
 def dkt_train_best_initialization():
     '''
-    Load the model saved in the best model checkpoint, train it some more and test.
+    Load the model saved when picking the best init, and train it some more, leaving the trained model in the normal checkpoints place.
     '''
     model_id = 'test2_model_small'
     
-    r_type = SEMISPARSE
-    n_rollouts = 50
-    n_trajectories = 100
-    
     dropout = 1.0
-    seqlen = 7 # training data parameter
-    filename = 'test2-n100000-l7-random-filtered.pickle'
-    modelfile = '{}-dropout{}-best.chkpt'.format(model_id, int(dropout * 100))
+    shuffle = False
+    seqlen = 6 # training data parameter
+    filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
+    modelfile = 'best-loss/{}-dropout{}-shuffle{}-{}-checkpoint'.format(model_id, int(dropout * 100), int(shuffle), filename)
     print('Model file: {}'.format(modelfile))
     
-    additional_epochs = 2
+    additional_epochs = 4
     
     data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
     input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
@@ -506,25 +495,40 @@ def dkt_train_best_initialization():
     # load the model
     dmodel.model.load(modelfile)
     ecall = ExtractCallback()
-    dmodel.train(train_data, n_epoch=additional_epochs, callbacks=ecall, load_checkpoint=False)
+    dmodel.train(train_data, n_epoch=additional_epochs, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
 
 if __name__ == '__main__':
     starttime = time.time()
 
     np.random.seed()
     random.seed()
-
+    
+    ######################################
+    # testing MCTS and making sure it works when given the true model
+    #test_student_exact()
+    ######################################
+    
+    
+    ######################################
+    # testing early stopping
+    test_dkt_early_stopping()
+    ######################################
+    
+    
+    ######################################
+    # first pick an initiailization
+    #dkt_pick_best_initialization()
+    
+    # then train the best init
+    #dkt_train_best_initialization()
+    
+    # then test the init
     model_id = 'test2_model_small'
     r_type = SEMISPARSE
-    n_rollouts = 100
+    n_rollouts = 400
     n_trajectories = 100
-    
-    #test_student_exact()
-    test_dkt(model_id, n_rollouts, n_trajectories, r_type)
-    
-    #test_dkt_early_stopping()
-    #dkt_pick_best_initialization()
-    #dkt_train_best_initialization()
+    #test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+    #######################################
 
     endtime = time.time()
     print('Time elapsed {}s'.format(endtime-starttime))
