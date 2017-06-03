@@ -48,7 +48,11 @@ class DynamicsModel(object):
                                                                                  n_hidden=self.model_dict["n_hidden"],
                                                                                  n_outputdim=self.model_dict["n_outputdim"],
                                                                                  dropout=dropout)
-
+        # the number of units in the memory c of lstm
+        self.hidden_c_size = self.hidden_1[0].shape[1]
+        # the number of units in the hidden units of lstm
+        self.hidden_h_size = self.hidden_1[0].shape[1]
+        
         tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
         checkpoint_dir = '../checkpoints/' + model_id + '/'
         checkpoint_path = checkpoint_dir + '_/'
@@ -71,7 +75,6 @@ class DynamicsModel(object):
                 print('No checkpoint found. ')
 
         print('Model loaded.')
-
 
     def _build_regression_lstm_net(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=0.5):

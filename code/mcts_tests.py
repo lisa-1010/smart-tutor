@@ -275,12 +275,16 @@ def test_dkt_single_greedy(dgraph, s, horizon, model):
         greedy.advance(best_action)
     return sim.student.knowledge
 
-def test_dkt_chunk(n_trajectories, dgraph, student, model_id, horizon, n_rollouts, use_greedy, r_type):
+def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
     '''
-    model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    if chkpt is not None:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
+        model.model.load(chkpt)
+    else:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
     acc = 0.0
     for i in xrange(n_trajectories):
         #print('traj i {}'.format(i))
@@ -291,7 +295,7 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, horizon, n_rollout
         acc += np.mean(k)
     return acc
 
-def test_dkt(model_id, n_rollouts, n_trajectories, r_type):
+def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
     '''
     Test DKT+MCTS
     '''
@@ -322,7 +326,7 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, horizon, n_rollouts, use_greedy, r_type) for _ in range(n_jobs))
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type) for _ in range(n_jobs))
     avg = sum(accs) / (n_jobs * traj_per_job)
 
 
@@ -367,16 +371,16 @@ def test_dkt_early_stopping():
     '''
     model_id = 'test2_model_small'
     r_type = SEMISPARSE
-    dropout = 0.7
+    dropout = 1.0
     shuffle = False
-    n_rollouts = 100
+    n_rollouts = 50
     n_trajectories = 100
-    seqlen = 6
-    filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
+    seqlen = 4
+    filename = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
 
-    total_epochs = 20
-    epochs_per_iter = 2
-    reps = 20
+    total_epochs = 40
+    epochs_per_iter = 4
+    reps = 10
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
@@ -427,12 +431,15 @@ def dkt_pick_best_initialization():
     Saves the model to a file along with best training loss, so this can be repeated.
     '''
     model_id = 'test2_model_small'
-    dropout = 1.0
+    dropout = 0.7
     shuffle = False
-    seqlen = 6 # training data parameter
+    seqlen = 7 # training data parameter
+    reps = 30
+    total_epochs = 9 # which epoch's training loss to use
+    
     filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
-    outputstatfile = 'best-loss/{}-dropout{}-shuffle{}-{}'.format(model_id, int(dropout * 100), int(shuffle), filename)
-    modelfile = 'best-loss/{}-dropout{}-shuffle{}-{}-checkpoint'.format(model_id, int(dropout * 100), int(shuffle), filename)
+    outputstatfile = 'best-loss/{}-dropout{}-epoch{}-{}'.format(model_id, int(dropout * 100), total_epochs, filename)
+    modelfile = 'best-loss/{}-dropout{}-epoch{}-{}-checkpoint'.format(model_id, int(dropout * 100), total_epochs, filename)
     print('Output stat file: {}'.format(outputstatfile))
     print('Output model file: {}'.format(modelfile))
     
@@ -444,8 +451,6 @@ def dkt_pick_best_initialization():
     except:
         pass
 
-    reps = 30
-    total_epochs = 1 # which epoch's training loss to use
     losses = []
     
     data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
@@ -456,7 +461,7 @@ def dkt_pick_best_initialization():
         dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
         ecall = ExtractCallback()
         dmodel.train(train_data, n_epoch=total_epochs, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
-        last_loss = ecall.tstates[-1].global_loss
+        last_loss = ecall.tstates[-1].val_loss # use val loss since dropout messes up train loss
         if best_loss is None or last_loss < best_loss:
             best_loss = last_loss
             # save the model
@@ -479,12 +484,12 @@ def dkt_train_best_initialization():
     
     dropout = 1.0
     shuffle = False
-    seqlen = 6 # training data parameter
+    seqlen = 7 # training data parameter
     filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
     modelfile = 'best-loss/{}-dropout{}-shuffle{}-{}-checkpoint'.format(model_id, int(dropout * 100), int(shuffle), filename)
     print('Model file: {}'.format(modelfile))
     
-    additional_epochs = 4
+    additional_epochs = 1
     
     data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
     input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
@@ -511,13 +516,13 @@ if __name__ == '__main__':
     
     ######################################
     # testing early stopping
-    test_dkt_early_stopping()
+    #test_dkt_early_stopping()
     ######################################
     
     
     ######################################
     # first pick an initiailization
-    #dkt_pick_best_initialization()
+    dkt_pick_best_initialization()
     
     # then train the best init
     #dkt_train_best_initialization()
@@ -525,9 +530,12 @@ if __name__ == '__main__':
     # then test the init
     model_id = 'test2_model_small'
     r_type = SEMISPARSE
-    n_rollouts = 400
+    n_rollouts = 300
     n_trajectories = 100
-    #test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+    
+    modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
+    
+    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=modelfile)
     #######################################
 
     endtime = time.time()
