@@ -196,9 +196,10 @@ def test_student_exact():
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type):
+def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
+    :param dktcache: a dictionary to use for the dkt cache
     '''
     n_concepts = dgraph.n
 
@@ -216,7 +217,7 @@ def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type):
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
 
-    root = StateNode(None, DKTState(model, sim, 1, horizon, r_type))
+    root = StateNode(None, DKTState(model, sim, 1, horizon, r_type, dktcache))
     for i in range(horizon):
         #print('Step {}'.format(i))
         best_action = uct(root, n=n_rollouts)
@@ -275,21 +276,26 @@ def test_dkt_single_greedy(dgraph, s, horizon, model):
         greedy.advance(best_action)
     return sim.student.knowledge
 
-def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type):
+def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
     '''
+    # load the model
     if chkpt is not None:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
         model.model.load(chkpt)
     else:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    # initialize the shared dktcache across MCTS trials
+    if dktcache is None:
+        dktcache = dict()
+    
     acc = 0.0
     for i in xrange(n_trajectories):
         #print('traj i {}'.format(i))
         if not use_greedy:
-            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type)
+            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache)
         else:
             k = test_dkt_single_greedy(dgraph, student, horizon, model)
         acc += np.mean(k)
@@ -304,7 +310,7 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
     
     n_concepts = 4
     use_greedy = False
-    learn_prob = 0.15
+    learn_prob = 0.5
     horizon = 6
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
@@ -317,16 +323,16 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
     #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
     student2 = st.Student2(n_concepts)
     test_student = student2
-
-    #model_id = 'test_model_small'
-    #model_id = 'test_model_mid'
-    #model_id = 'test_model'
+    
+    # create a shared dktcache across all processes
+    dktcache_manager = mp.Manager()
+    dktcache = dktcache_manager.dict()
 
     print('Testing model: {}'.format(model_id))
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type) for _ in range(n_jobs))
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache) for _ in range(n_jobs))
     avg = sum(accs) / (n_jobs * traj_per_job)
 
 
@@ -519,23 +525,22 @@ if __name__ == '__main__':
     #test_dkt_early_stopping()
     ######################################
     
-    
     ######################################
     # first pick an initiailization
-    dkt_pick_best_initialization()
+    #dkt_pick_best_initialization()
     
     # then train the best init
     #dkt_train_best_initialization()
     
     # then test the init
     model_id = 'test2_model_small'
-    r_type = SEMISPARSE
+    r_type = SPARSE
     n_rollouts = 300
     n_trajectories = 100
     
     modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
     
-    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=modelfile)
+    test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=modelfile)
     #######################################
 
     endtime = time.time()

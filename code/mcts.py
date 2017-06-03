@@ -158,25 +158,38 @@ class DKTState(object):
     '''
     The belief state to be used in MCTS, implemented using a DKT.
     '''
-    def __init__(self, model, sim, step, horizon, r_type, new_act=None, new_ob=None):
+    def __init__(self, model, sim, step, horizon, r_type, dktcache, new_act=None, new_ob=None, histhash=''):
         '''
         :param model: RnnStudentSim object
         :param sim: StudentExactSim object
+        :param step: int, current step
+        :param horizon: int, horizon
+        :param r_type: an r_type
+        :param dktcache: a dictionary used for caching the Rnn predictions
+        :param new_act: immediate action that led to this state
+        :param new_ob: immediate observation that led to this state
+        :param histhash: str rep of the current history used for dktcache
         '''
         # the model will be passed down when doing real world perform
         self.belief = model
         self._probs = None # caches the current prob predictions
         self.step = step
         self.horizon = horizon
+        self.r_type = r_type
+        
         # keep track of history for debugging and various uses
         self.act = new_act
         self.ob = new_ob
+        
         # this sim should be shared between all DKTStates
         # and it is advanced only when real_world_perform is called
         # so all references to it will all be advanced
         self.sim = sim
         self.n_concepts = sim.student.knowledge.shape[0]
-        self.r_type = r_type
+        
+        # setup caching rnn queries
+        self.dktcache = dktcache
+        self.histhash = histhash
         
         self.actions = []
         for i in range(self.n_concepts):
@@ -184,14 +197,25 @@ class DKTState(object):
             concepts[i] = 1
             self.actions.append(st.StudentAction(i, concepts))
     
+    def _next_histhash(self, new_act, new_ob):
+        return self.histhash + '{}{};'.format(new_act, new_ob)
+    
     def get_probs(self):
         # computes and caches the probs for the current state
         if self._probs is None:
-            self._probs = self.belief.sample_observations()
-            if self._probs is None:
-                # assume [1 0 0 0 0 ...]
-                self._probs = [0.0] * self.sim.dgraph.n
-                self._probs[0] = 1.0
+            # first try the dktcache
+            trycache = self.dktcache.get(self.histhash, None)
+            
+            if trycache is None:
+                # actually run it and update the cache
+                trycache = self.belief.sample_observations()
+                if trycache is None:
+                    trycache = [0.0] * self.sim.dgraph.n
+                    trycache[0] = 1.0
+            # cache back
+            self.dktcache[self.histhash] = trycache
+            # cache at this state as well
+            self._probs = trycache
         return self._probs
     
     def perform(self, action):
@@ -205,7 +229,9 @@ class DKTState(object):
         new_model.advance_simulator(action, ob)
         new_act = action.concept
         new_ob = ob
-        return DKTState(new_model, self.sim, self.step+1, self.horizon, self.r_type, new_act=new_act, new_ob=new_ob)
+        new_histhash = self._next_histhash(new_act, new_ob)
+        return DKTState(new_model, self.sim, self.step+1, self.horizon, self.r_type,
+                        self.dktcache, new_act=new_act, new_ob=new_ob, histhash=new_histhash)
     
     def real_world_perform(self, action):
         '''
@@ -219,7 +245,9 @@ class DKTState(object):
         new_model.advance_simulator(action, ob)
         new_act = action.concept
         new_ob = ob
-        return DKTState(new_model, self.sim, self.step+1, self.horizon, self.r_type, new_act=new_act, new_ob=new_ob)
+        new_histhash = self._next_histhash(new_act, new_ob)
+        return DKTState(new_model, self.sim, self.step+1, self.horizon, self.r_type,
+                        self.dktcache, new_act=new_act, new_ob=new_ob, histhash=new_histhash)
     
     def reward(self):
         probs = self.get_probs()
