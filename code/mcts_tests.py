@@ -379,14 +379,14 @@ def test_dkt_early_stopping():
     r_type = SEMISPARSE
     dropout = 1.0
     shuffle = False
-    n_rollouts = 200
+    n_rollouts = 1000
     n_trajectories = 100
     seqlen = 6
     filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen) # < 6 is already no full mastery
 
-    total_epochs = 16
-    epochs_per_iter = 2
-    reps = 20
+    total_epochs = 12
+    epochs_per_iter = 12
+    reps = 40
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
