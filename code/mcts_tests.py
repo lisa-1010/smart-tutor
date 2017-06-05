@@ -363,11 +363,11 @@ def staggered_dkt_training(filename, model_id, seqlen, dropout, shuffle, reps, t
     
     for r in xrange(reps):
         dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
-        ecall = ExtractCallback()
         for ep in xrange(0,total_epochs,epochs_per_iter):
             sig_start.wait()
             sig_start.clear()
             #print('Training rep {} epoch {}'.format(r, ep))
+            ecall = ExtractCallback()
             dmodel.train(train_data, n_epoch=epochs_per_iter, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
             return_channel.send(([c.global_loss for c in ecall.tstates],[c.val_loss for c in ecall.tstates]))
 
@@ -379,14 +379,14 @@ def test_dkt_early_stopping():
     r_type = SEMISPARSE
     dropout = 1.0
     shuffle = False
-    n_rollouts = 50
+    n_rollouts = 200
     n_trajectories = 100
-    seqlen = 4
-    filename = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
+    seqlen = 6
+    filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen) # < 6 is already no full mastery
 
-    total_epochs = 40
-    epochs_per_iter = 4
-    reps = 10
+    total_epochs = 16
+    epochs_per_iter = 2
+    reps = 20
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
@@ -395,40 +395,30 @@ def test_dkt_early_stopping():
     
     losses = []
     val_losses = []
-    scores = np.zeros((reps,total_epochs))
+    score_eps = []
+    scores = []
     
     training_process.start()
     for r in xrange(reps):
         losses.append(list())
         val_losses.append(list())
+        score_eps.append(list())
+        scores.append(list())
         for ep in xrange(0,total_epochs,epochs_per_iter):
-            print('--------------------------------------------------------')
-            print('Rep {} Epoch {}'.format(r+1, ep+epochs_per_iter))
-            print('--------------------------------------------------------')
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r+1, ep+epochs_per_iter))
+            print('=====================================')
             sig_start.set() # signal the training to perform one epoch
             ret_val = p_ch.recv() # wait until its done
             losses[r].extend(ret_val[0])
             val_losses[r].extend(ret_val[1])
             
             # now compute the policy estimate
-            scores[r,ep] = test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+            score_eps[r].append(ep+epochs_per_iter)
+            scores[r].append(test_dkt(model_id, n_rollouts, n_trajectories, r_type))
     training_process.join() # finish up
     
-    score_lst = []
-    for r in xrange(reps):
-        score_lst.append([])
-        for ep in xrange(0,total_epochs,epochs_per_iter):
-            score_lst[r].append(scores[r,ep])
-    with open('output.txt','w') as f:
-        f.write('Losses\n')
-        for r in xrange(reps):
-            f.write('{}\n'.format(losses[r]))
-        f.write('Val Losses\n')
-        for r in xrange(reps):
-            f.write('{}\n'.format(val_losses[r]))
-        f.write('Posttest Scores\n')
-        for r in xrange(reps):
-            f.write('{}\n'.format(score_lst[r]))
+    np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores)
 
 
 def dkt_pick_best_initialization():
@@ -522,7 +512,7 @@ if __name__ == '__main__':
     
     ######################################
     # testing early stopping
-    #test_dkt_early_stopping()
+    test_dkt_early_stopping()
     ######################################
     
     ######################################
@@ -540,7 +530,7 @@ if __name__ == '__main__':
     
     modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
     
-    test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=modelfile)
+    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=modelfile)
     #######################################
 
     endtime = time.time()

@@ -25,7 +25,7 @@ def main():
     lp_str = '-lp{}'.format(int(learn_prob*100)) if not use_student2 else ''
     n_students = 100000
     seqlen = 7
-    filter_mastery = False
+    filter_mastery = True
     filter_str = '' if not filter_mastery else '-filtered'
     policy = 'random'
     filename = 'test{}-n{}-l{}{}-{}{}.pickle'.format(student2_str, n_students, seqlen,
@@ -58,9 +58,9 @@ def main():
     # test_model_small hidden=5
     # test_model_tiny hidden=3
     model_id = "test2_model_small"
-    dropouts = np.array([1.0, 0.9, 0.8, 0.7])
+    dropouts = np.array([1.0])
     n_dropouts = dropouts.shape[0]
-    total_epochs = 20
+    total_epochs = 14
     reps = 20
 
     class ExtractCallback(tflearn.callbacks.Callback):
@@ -76,6 +76,9 @@ def main():
         for d in range(n_dropouts):
             dropout = dropouts[d]
             for r in range(reps):
+                print('----------------------------------------')
+                print('---------- Dropout {:3.1f} Rep {:2d} ----------'.format(dropout, r+1))
+                print('----------------------------------------')
                 ecall = ExtractCallback()
                 dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
                 dmodel.train(train_data, n_epoch=total_epochs, callbacks=ecall, shuffle=False, load_checkpoint=False)
