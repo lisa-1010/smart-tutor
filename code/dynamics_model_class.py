@@ -43,7 +43,7 @@ class DynamicsModel(object):
         tf.reset_default_graph()
         self.timesteps = timesteps
         self.model_dict = models_dict_utils.load_model_dict(model_id)
-        self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
+        self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net2(n_timesteps=timesteps,
                                                                                  n_inputdim=self.model_dict["n_inputdim"],
                                                                                  n_hidden=self.model_dict["n_hidden"],
                                                                                  n_outputdim=self.model_dict["n_outputdim"],
@@ -87,6 +87,18 @@ class DynamicsModel(object):
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
                                  loss='mean_square')
         return net, hidden_states_1, hidden_states_2
+    
+    def _build_regression_lstm_net2(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
+                                           n_outputdim=n_outputdim, dropout=0.5):
+        net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
+        output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
+        net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
+        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
+        net = tf.stack(net, axis=1)
+        net = net * output_mask
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
+                                 loss='mean_square')
+        return net, hidden_states_1, None
 
 
     def train(self, train_data, n_epoch=64, callbacks=[], shuffle=None, load_checkpoint=True):
