@@ -223,6 +223,13 @@ def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache):
         best_action = uct(root, n=n_rollouts)
         #print('Current state: {}'.format(str(root.state)))
         #print(best_action.concept)
+        
+        # return the largest q-value at the root
+        if i == 0:
+            #print('Root q value: {}'.format(root.q))
+            #child = root.children[best_action]
+            #print('--- Best Child action {}, q value {}'.format(child.action.concept, child.q))
+            best_q_value = root.q
 
         # debug check for whether action is optimal
         if False:
@@ -239,7 +246,7 @@ def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache):
         new_root.parent = None # cutoff the rest of the tree
         root = new_root
         #print('Next state: {}'.format(str(new_root.state)))
-    return sim.student.knowledge
+    return sim.student.knowledge, best_q_value
 
 
 def test_dkt_single_greedy(dgraph, s, horizon, model):
@@ -292,14 +299,17 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_
         dktcache = dict()
     
     acc = 0.0
+    best_q = 0.0
     for i in xrange(n_trajectories):
         #print('traj i {}'.format(i))
         if not use_greedy:
-            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache)
+            k, best_q_value = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache)
         else:
             k = test_dkt_single_greedy(dgraph, student, horizon, model)
+            best_q_value = 0
         acc += np.mean(k)
-    return acc
+        best_q += best_q_value
+    return acc, best_q
 
 def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
     '''
@@ -332,14 +342,16 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache) for _ in range(n_jobs))
-    avg = sum(accs) / (n_jobs * traj_per_job)
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache) for _ in range(n_jobs)))
+    results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
+    avg_acc, avg_best_q = results[0], results[1]
 
 
     test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Average posttest true: {}'.format(expected_reward(test_data)))
-    print('Average posttest mcts: {}'.format(avg))
-    return avg
+    print('Average posttest mcts: {}'.format(avg_acc))
+    print('Average best q: {}'.format(avg_best_q))
+    return avg_acc, avg_best_q
 
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
@@ -379,14 +391,14 @@ def test_dkt_early_stopping():
     r_type = SEMISPARSE
     dropout = 1.0
     shuffle = False
-    n_rollouts = 300
+    n_rollouts = 1000
     n_trajectories = 100
     seqlen = 5
     filename = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
 
-    total_epochs = 24
-    epochs_per_iter = 2
-    reps = 10
+    total_epochs = 14
+    epochs_per_iter = 14
+    reps = 20
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
@@ -397,6 +409,7 @@ def test_dkt_early_stopping():
     val_losses = []
     score_eps = []
     scores = []
+    best_qs = []
     
     training_process.start()
     for r in xrange(reps):
@@ -404,6 +417,7 @@ def test_dkt_early_stopping():
         val_losses.append(list())
         score_eps.append(list())
         scores.append(list())
+        best_qs.append(list())
         for ep in xrange(0,total_epochs,epochs_per_iter):
             print('=====================================')
             print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r+1, ep+epochs_per_iter))
@@ -415,10 +429,12 @@ def test_dkt_early_stopping():
             
             # now compute the policy estimate
             score_eps[r].append(ep+epochs_per_iter)
-            scores[r].append(test_dkt(model_id, n_rollouts, n_trajectories, r_type))
+            score, best_q = test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+            scores[r].append(score)
+            best_qs[r].append(best_q)
     training_process.join() # finish up
     
-    np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores)
+    np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores, qs=best_qs)
 
 
 def dkt_pick_best_initialization():
@@ -524,13 +540,13 @@ if __name__ == '__main__':
     
     # then test the init
     model_id = 'test2_model_small'
-    r_type = SPARSE
+    r_type = SEMISPARSE
     n_rollouts = 300
     n_trajectories = 100
     
     modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
     
-    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=modelfile)
+    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None)
     #######################################
 
     endtime = time.time()
