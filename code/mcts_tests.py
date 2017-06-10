@@ -196,7 +196,7 @@ def test_student_exact():
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache):
+def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache, use_real):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
     :param dktcache: a dictionary to use for the dkt cache
@@ -217,29 +217,19 @@ def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache):
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
 
-    root = StateNode(None, DKTState(model, sim, 1, horizon, r_type, dktcache))
+    root = StateNode(None, DKTState(model, sim, 1, horizon, r_type, dktcache, use_real))
     for i in range(horizon):
         #print('Step {}'.format(i))
         best_action = uct(root, n=n_rollouts)
         #print('Current state: {}'.format(str(root.state)))
         #print(best_action.concept)
         
-        # return the largest q-value at the root
-        if i == 0:
+        # return the largest q-value at the end
+        if i == horizon-1:
             #print('Root q value: {}'.format(root.q))
-            #child = root.children[best_action]
+            child = root.children[best_action]
             #print('--- Best Child action {}, q value {}'.format(child.action.concept, child.q))
-            best_q_value = root.q
-
-        # debug check for whether action is optimal
-        if False:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action.concept in opt_acts
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
+            best_q_value = child.q
 
         # act in the real environment
         new_root = root.children[best_action].sample_state(real_world=True)
@@ -283,7 +273,7 @@ def test_dkt_single_greedy(dgraph, s, horizon, model):
         greedy.advance(best_action)
     return sim.student.knowledge
 
-def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None):
+def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None, use_real=True):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -303,7 +293,7 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_
     for i in xrange(n_trajectories):
         #print('traj i {}'.format(i))
         if not use_greedy:
-            k, best_q_value = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache)
+            k, best_q_value = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache, use_real)
         else:
             k = test_dkt_single_greedy(dgraph, student, horizon, model)
             best_q_value = 0
@@ -311,7 +301,7 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_
         best_q += best_q_value
     return acc, best_q
 
-def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
+def test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None):
     '''
     Test DKT+MCTS
     '''
@@ -342,7 +332,7 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
@@ -398,7 +388,7 @@ def test_dkt_early_stopping():
 
     total_epochs = 14
     epochs_per_iter = 14
-    reps = 20
+    reps = 40
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
@@ -429,7 +419,8 @@ def test_dkt_early_stopping():
             
             # now compute the policy estimate
             score_eps[r].append(ep+epochs_per_iter)
-            score, best_q = test_dkt(model_id, n_rollouts, n_trajectories, r_type)
+            score, _ = test_dkt(model_id, n_rollouts, n_trajectories, r_type, True)
+            _, best_q = test_dkt(model_id, n_rollouts, n_trajectories, r_type, False)
             scores[r].append(score)
             best_qs[r].append(best_q)
     training_process.join() # finish up
@@ -541,12 +532,13 @@ if __name__ == '__main__':
     # then test the init
     model_id = 'test2_model_small'
     r_type = SEMISPARSE
+    use_real = False
     n_rollouts = 300
     n_trajectories = 100
     
-    modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
+    #modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
     
-    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None)
+    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
     #######################################
 
     endtime = time.time()
