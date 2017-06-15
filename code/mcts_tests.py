@@ -16,6 +16,8 @@ import time
 import copy
 import pickle
 import multiprocessing as mp
+import six
+import os
 
 import constants
 import data_generator as dg
@@ -354,6 +356,7 @@ class ExtractCallback(tflearn.callbacks.Callback):
 
 def staggered_dkt_training(filename, model_id, seqlen, dropout, shuffle, reps, total_epochs, epochs_per_iter, sig_start, return_channel):
     '''
+    DEPRECATED
     This is supposed to be used in a separate process that trains a DKT epoch by epoch.
     It waits for the parent process to send an Event signal before each training epoch.
     It returns an intermediate value when done.
@@ -375,6 +378,7 @@ def staggered_dkt_training(filename, model_id, seqlen, dropout, shuffle, reps, t
 
 def test_dkt_early_stopping():
     '''
+    DEPRECATED
     Performs an experiment where every few epochs of training we test with MCTS, and this is repeated.
     '''
     model_id = 'test2_model_small'
@@ -430,6 +434,7 @@ def test_dkt_early_stopping():
 
 def dkt_pick_best_initialization():
     '''
+    DEPRECATED
     Initialize many models and pick based on the training loss.
     Saves the model to a file along with best training loss, so this can be repeated.
     '''
@@ -481,6 +486,7 @@ def dkt_pick_best_initialization():
     
 def dkt_train_best_initialization():
     '''
+    DEPRECATED
     Load the model saved when picking the best init, and train it some more, leaving the trained model in the normal checkpoints place.
     '''
     model_id = 'test2_model_small'
@@ -505,6 +511,63 @@ def dkt_train_best_initialization():
     ecall = ExtractCallback()
     dmodel.train(train_data, n_epoch=additional_epochs, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
 
+def dkt_train_models(params):
+    '''
+    Trains a bunch of random restarts of models, checkpointed at various times
+    '''
+    
+    # first try to create the checkpoint directory if it doesn't exist
+    try:
+        os.makedirs(params.dir_name)
+    except:
+        # do nothing if already exists
+        pass
+    
+    # total number of epochs to train for, should be passed in as the last epoch to be saved
+    total_epochs = params.saved_epochs[-1]
+    
+    train_losses = [[] for _ in six.moves.range(params.num_runs)]
+    val_losses = [[] for _ in six.moves.range(params.num_runs)]
+    
+    #load data
+    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
+    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
+    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
+    
+    for r in six.moves.range(params.num_runs):
+        # new model instantiation
+        dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen, dropout=params.dropout, load_checkpoint=False)
+        
+        epochs_trained = 0
+        for ep in params.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # remember the epochs are given as zero-based
+            epochs_to_train = ep+1 - epochs_trained
+            assert epochs_to_train > 0
+            
+            # train
+            ecall = ExtractCallback()
+            dkt_model.train(train_data, n_epoch=epochs_to_train, callbacks=ecall, shuffle=params.shuffle, load_checkpoint=False)
+            
+            # save the checkpoint
+            checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
+            dkt_model.model.save(checkpoint_path)
+            
+            # update stats
+            train_losses[r].extend([c.global_loss for c in ecall.tstates])
+            val_losses[r].extend([c.val_loss for c in ecall.tstates])
+            
+            # update epochs_trained
+            epochs_trained = ep+1
+    
+    # save stats
+    stats_path = '{}/{}'.format(params.dir_name,params.stat_name)
+    np.savez(stats_path,tloss=train_losses, vloss=val_losses,eps=params.saved_epochs)
+
 if __name__ == '__main__':
     starttime = time.time()
 
@@ -518,18 +581,43 @@ if __name__ == '__main__':
     
     
     ######################################
-    # testing early stopping
-    test_dkt_early_stopping()
+    # General tests where I train a bunch of models and save them
+    # then I run analysis on the saved models
     ######################################
     
+    class TrainParams:
+        '''
+        Parameters for training models
+        '''
+        model_id = 'test2_model_small'
+        r_type = SEMISPARSE
+        dropout = 1.0
+        shuffle = False
+        seqlen = 5
+        datafile = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
+        # which epochs (zero-based) to save, the last saved epoch is the total epoch
+        saved_epochs = [13]
+        # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
+        run_name = 'run'
+        # how many runs
+        num_runs = 20
+        
+        # these names are derived from above and should not be touched generally
+        # folder to put the checkpoints into
+        dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(model_id,int(dropout*10),int(shuffle),datafile)
+        # pattern for the checkpoints
+        checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+        # stat file
+        stat_name = 'stats-{}'.format(run_name)
+        
+        
+    # train and checkpoint the models
+    dkt_train_models(TrainParams)
+    
+    
     ######################################
-    # first pick an initiailization
-    #dkt_pick_best_initialization()
     
-    # then train the best init
-    #dkt_train_best_initialization()
-    
-    # then test the init
+    # test individual models
     model_id = 'test2_model_small'
     r_type = SEMISPARSE
     use_real = False
