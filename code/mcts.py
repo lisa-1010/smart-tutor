@@ -158,7 +158,7 @@ class DKTState(object):
     '''
     The belief state to be used in MCTS, implemented using a DKT.
     '''
-    def __init__(self, model, sim, step, horizon, r_type, dktcache, new_act=None, new_ob=None, histhash=''):
+    def __init__(self, model, sim, step, horizon, r_type, dktcache, use_real, new_act=None, new_ob=None, histhash=''):
         '''
         :param model: RnnStudentSim object
         :param sim: StudentExactSim object
@@ -166,6 +166,7 @@ class DKTState(object):
         :param horizon: int, horizon
         :param r_type: an r_type
         :param dktcache: a dictionary used for caching the Rnn predictions
+        :param use_real: use the sim as the real world, otherwise use model
         :param new_act: immediate action that led to this state
         :param new_ob: immediate observation that led to this state
         :param histhash: str rep of the current history used for dktcache
@@ -176,6 +177,7 @@ class DKTState(object):
         self.step = step
         self.horizon = horizon
         self.r_type = r_type
+        self.use_real = use_real
         
         # keep track of history for debugging and various uses
         self.act = new_act
@@ -231,23 +233,26 @@ class DKTState(object):
         new_ob = ob
         new_histhash = self._next_histhash(new_act, new_ob)
         return DKTState(new_model, self.sim, self.step+1, self.horizon, self.r_type,
-                        self.dktcache, new_act=new_act, new_ob=new_ob, histhash=new_histhash)
+                        self.dktcache, self.use_real, new_act=new_act, new_ob=new_ob, histhash=new_histhash)
     
     def real_world_perform(self, action):
         '''
         Advances the true student simulator.
         Creates a new state where the DKT model is advanced according to the result of the true simulator.
         '''
-        # advance the true student simulator
-        (ob, r) = self.sim.advance_simulator(action)
-        # advance the model with the true observation
-        new_model = self.belief.copy()
-        new_model.advance_simulator(action, ob)
-        new_act = action.concept
-        new_ob = ob
-        new_histhash = self._next_histhash(new_act, new_ob)
-        return DKTState(new_model, self.sim, self.step+1, self.horizon, self.r_type,
-                        self.dktcache, new_act=new_act, new_ob=new_ob, histhash=new_histhash)
+        if self.use_real:
+            # advance the true student simulator
+            (ob, r) = self.sim.advance_simulator(action)
+            # advance the model with the true observation
+            new_model = self.belief.copy()
+            new_model.advance_simulator(action, ob)
+            new_act = action.concept
+            new_ob = ob
+            new_histhash = self._next_histhash(new_act, new_ob)
+            return DKTState(new_model, self.sim, self.step+1, self.horizon, self.r_type,
+                            self.dktcache, self.use_real, new_act=new_act, new_ob=new_ob, histhash=new_histhash)
+        else:
+            return self.perform(action)
     
     def reward(self):
         probs = self.get_probs()
@@ -347,3 +352,4 @@ class DKTGreedyPolicy(object):
             probs = [0] * self.sim.dgraph.n
             probs[0] = 1
         return 'K {}'.format(probs)
+

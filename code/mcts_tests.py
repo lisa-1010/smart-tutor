@@ -16,6 +16,8 @@ import time
 import copy
 import pickle
 import multiprocessing as mp
+import six
+import os
 
 import constants
 import data_generator as dg
@@ -196,7 +198,7 @@ def test_student_exact():
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache):
+def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache, use_real):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
     :param dktcache: a dictionary to use for the dkt cache
@@ -217,29 +219,26 @@ def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache):
     uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
                backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
 
-    root = StateNode(None, DKTState(model, sim, 1, horizon, r_type, dktcache))
+    root = StateNode(None, DKTState(model, sim, 1, horizon, r_type, dktcache, use_real))
     for i in range(horizon):
         #print('Step {}'.format(i))
         best_action = uct(root, n=n_rollouts)
         #print('Current state: {}'.format(str(root.state)))
         #print(best_action.concept)
-
-        # debug check for whether action is optimal
-        if False:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action.concept in opt_acts
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
+        
+        # return the largest q-value at the end
+        if i == horizon-1:
+            #print('Root q value: {}'.format(root.q))
+            child = root.children[best_action]
+            #print('--- Best Child action {}, q value {}'.format(child.action.concept, child.q))
+            best_q_value = child.q
 
         # act in the real environment
         new_root = root.children[best_action].sample_state(real_world=True)
         new_root.parent = None # cutoff the rest of the tree
         root = new_root
         #print('Next state: {}'.format(str(new_root.state)))
-    return sim.student.knowledge
+    return sim.student.knowledge, best_q_value
 
 
 def test_dkt_single_greedy(dgraph, s, horizon, model):
@@ -276,7 +275,7 @@ def test_dkt_single_greedy(dgraph, s, horizon, model):
         greedy.advance(best_action)
     return sim.student.knowledge
 
-def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None):
+def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None, use_real=True):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -292,16 +291,19 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_
         dktcache = dict()
     
     acc = 0.0
+    best_q = 0.0
     for i in xrange(n_trajectories):
         #print('traj i {}'.format(i))
         if not use_greedy:
-            k = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache)
+            k, best_q_value = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache, use_real)
         else:
             k = test_dkt_single_greedy(dgraph, student, horizon, model)
+            best_q_value = 0
         acc += np.mean(k)
-    return acc
+        best_q += best_q_value
+    return acc, best_q
 
-def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
+def test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None):
     '''
     Test DKT+MCTS
     '''
@@ -332,14 +334,16 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=None):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache) for _ in range(n_jobs))
-    avg = sum(accs) / (n_jobs * traj_per_job)
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
+    results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
+    avg_acc, avg_best_q = results[0], results[1]
 
 
     test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Average posttest true: {}'.format(expected_reward(test_data)))
-    print('Average posttest mcts: {}'.format(avg))
-    return avg
+    print('Average posttest mcts: {}'.format(avg_acc))
+    print('Average best q: {}'.format(avg_best_q))
+    return avg_acc, avg_best_q
 
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
@@ -352,6 +356,7 @@ class ExtractCallback(tflearn.callbacks.Callback):
 
 def staggered_dkt_training(filename, model_id, seqlen, dropout, shuffle, reps, total_epochs, epochs_per_iter, sig_start, return_channel):
     '''
+    DEPRECATED
     This is supposed to be used in a separate process that trains a DKT epoch by epoch.
     It waits for the parent process to send an Event signal before each training epoch.
     It returns an intermediate value when done.
@@ -373,20 +378,21 @@ def staggered_dkt_training(filename, model_id, seqlen, dropout, shuffle, reps, t
 
 def test_dkt_early_stopping():
     '''
+    DEPRECATED
     Performs an experiment where every few epochs of training we test with MCTS, and this is repeated.
     '''
     model_id = 'test2_model_small'
     r_type = SEMISPARSE
     dropout = 1.0
     shuffle = False
-    n_rollouts = 300
+    n_rollouts = 1000
     n_trajectories = 100
     seqlen = 5
     filename = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
 
-    total_epochs = 24
-    epochs_per_iter = 2
-    reps = 10
+    total_epochs = 14
+    epochs_per_iter = 14
+    reps = 40
     
     sig_start = mp.Event()
     (p_ch, c_ch) = mp.Pipe()
@@ -397,6 +403,7 @@ def test_dkt_early_stopping():
     val_losses = []
     score_eps = []
     scores = []
+    best_qs = []
     
     training_process.start()
     for r in xrange(reps):
@@ -404,6 +411,7 @@ def test_dkt_early_stopping():
         val_losses.append(list())
         score_eps.append(list())
         scores.append(list())
+        best_qs.append(list())
         for ep in xrange(0,total_epochs,epochs_per_iter):
             print('=====================================')
             print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r+1, ep+epochs_per_iter))
@@ -415,14 +423,18 @@ def test_dkt_early_stopping():
             
             # now compute the policy estimate
             score_eps[r].append(ep+epochs_per_iter)
-            scores[r].append(test_dkt(model_id, n_rollouts, n_trajectories, r_type))
+            score, _ = test_dkt(model_id, n_rollouts, n_trajectories, r_type, True)
+            _, best_q = test_dkt(model_id, n_rollouts, n_trajectories, r_type, False)
+            scores[r].append(score)
+            best_qs[r].append(best_q)
     training_process.join() # finish up
     
-    np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores)
+    np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores, qs=best_qs)
 
 
 def dkt_pick_best_initialization():
     '''
+    DEPRECATED
     Initialize many models and pick based on the training loss.
     Saves the model to a file along with best training loss, so this can be repeated.
     '''
@@ -474,6 +486,7 @@ def dkt_pick_best_initialization():
     
 def dkt_train_best_initialization():
     '''
+    DEPRECATED
     Load the model saved when picking the best init, and train it some more, leaving the trained model in the normal checkpoints place.
     '''
     model_id = 'test2_model_small'
@@ -498,6 +511,63 @@ def dkt_train_best_initialization():
     ecall = ExtractCallback()
     dmodel.train(train_data, n_epoch=additional_epochs, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
 
+def dkt_train_models(params):
+    '''
+    Trains a bunch of random restarts of models, checkpointed at various times
+    '''
+    
+    # first try to create the checkpoint directory if it doesn't exist
+    try:
+        os.makedirs(params.dir_name)
+    except:
+        # do nothing if already exists
+        pass
+    
+    # total number of epochs to train for, should be passed in as the last epoch to be saved
+    total_epochs = params.saved_epochs[-1]
+    
+    train_losses = [[] for _ in six.moves.range(params.num_runs)]
+    val_losses = [[] for _ in six.moves.range(params.num_runs)]
+    
+    #load data
+    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
+    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
+    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
+    
+    for r in six.moves.range(params.num_runs):
+        # new model instantiation
+        dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen, dropout=params.dropout, load_checkpoint=False)
+        
+        epochs_trained = 0
+        for ep in params.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # remember the epochs are given as zero-based
+            epochs_to_train = ep+1 - epochs_trained
+            assert epochs_to_train > 0
+            
+            # train
+            ecall = ExtractCallback()
+            dkt_model.train(train_data, n_epoch=epochs_to_train, callbacks=ecall, shuffle=params.shuffle, load_checkpoint=False)
+            
+            # save the checkpoint
+            checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
+            dkt_model.model.save(checkpoint_path)
+            
+            # update stats
+            train_losses[r].extend([c.global_loss for c in ecall.tstates])
+            val_losses[r].extend([c.val_loss for c in ecall.tstates])
+            
+            # update epochs_trained
+            epochs_trained = ep+1
+    
+    # save stats
+    stats_path = '{}/{}'.format(params.dir_name,params.stat_name)
+    np.savez(stats_path,tloss=train_losses, vloss=val_losses,eps=params.saved_epochs)
+
 if __name__ == '__main__':
     starttime = time.time()
 
@@ -511,26 +581,52 @@ if __name__ == '__main__':
     
     
     ######################################
-    # testing early stopping
-    test_dkt_early_stopping()
+    # General tests where I train a bunch of models and save them
+    # then I run analysis on the saved models
     ######################################
     
+    class TrainParams:
+        '''
+        Parameters for training models
+        '''
+        model_id = 'test2_model_small'
+        r_type = SEMISPARSE
+        dropout = 1.0
+        shuffle = False
+        seqlen = 5
+        datafile = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
+        # which epochs (zero-based) to save, the last saved epoch is the total epoch
+        saved_epochs = [13]
+        # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
+        run_name = 'run'
+        # how many runs
+        num_runs = 20
+        
+        # these names are derived from above and should not be touched generally
+        # folder to put the checkpoints into
+        dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(model_id,int(dropout*10),int(shuffle),datafile)
+        # pattern for the checkpoints
+        checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+        # stat file
+        stat_name = 'stats-{}'.format(run_name)
+        
+        
+    # train and checkpoint the models
+    dkt_train_models(TrainParams)
+    
+    
     ######################################
-    # first pick an initiailization
-    #dkt_pick_best_initialization()
     
-    # then train the best init
-    #dkt_train_best_initialization()
-    
-    # then test the init
+    # test individual models
     model_id = 'test2_model_small'
-    r_type = SPARSE
+    r_type = SEMISPARSE
+    use_real = False
     n_rollouts = 300
     n_trajectories = 100
     
-    modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
+    #modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
     
-    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, chkpt=modelfile)
+    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
     #######################################
 
     endtime = time.time()
