@@ -8,8 +8,8 @@
 # This object keeps track of a student's knowledge (latent state)
 # The student model is defined by three probabilities:
 #       - p_trans_satisfied: probability of learning a new concept given that
-#           all prequisite concepts have been learned/satisfied
-#       - p_trans_not_satisfied: probability of learnign a new concept given
+#           all prerequisite concepts have been learned/satisfied
+#       - p_trans_not_satisfied: probability of learning a new concept given
 #           that not all prerequisite concepts have been learned
 #       - p_get_exercise_correct_if_concepts_learned: probability of getting an
 #           exercise correct if all concepts it tests have been learned by the student.
@@ -17,7 +17,7 @@
 #===============================================================================
 # CURRENT STATUS: Working
 #===============================================================================
-# USAGE: from student import *
+# USAGE: import student as st
 
 
 from __future__ import absolute_import, division, print_function
@@ -105,7 +105,7 @@ class Student(object):
 
 class Student2(object):
     '''
-    Special Deterministic Student.
+    Special Deterministic Student to facilitate testing. Should be easier to learn than probabilistic student.
     Instead of a probability of mastering a skill when prereqs are fulfilled, always need exactly two tries.
     This means the first try is always a fail, and second try is always a success.
     Deterministic observations still.
@@ -168,7 +168,6 @@ class Student2(object):
     # END OF class Student2
 
 
-
 class StudentExactSim(object):
     '''
     A model-based simulator for a student. Maintains its own internal hidden state. This wraps around the true simulator.
@@ -198,10 +197,10 @@ class StudentExactSim(object):
         return new_copy
 
 
-
 class StudentAction(object):
     '''
     Represents an action of the tutor, i.e. a problem to give to the student.
+    Purpose: To facilitate swapping between vectorized and indexed representation of concepts.
     '''
     def __init__(self, concept, conceptvec):
         self.concept = concept

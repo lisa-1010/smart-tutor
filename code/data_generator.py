@@ -29,16 +29,13 @@ import time
 import copy
 from collections import defaultdict, deque, Counter
 
-
 # Custom Modules
 from filepaths import *
 from constants import *
 import dataset_utils
-
-# Import custom classes
-from concept_dependency_graph import *
-from student import *
-from exercise import *
+import concept_dependency_graph as cdg
+import student as st
+import exercise as exer
 
 
 def fulfilled_prereqs(concept_tree, knowledge, concepts):
@@ -98,7 +95,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         initial_knowledge = np.zeros((n_concepts,))
         initial_knowledge[0] = 1
     if student is None:
-        s = Student()
+        s = st.Student()
     else:
         s = student
         s.reset() # make sure to reset to intial conditions for this sample
@@ -118,7 +115,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
             elif policy == 'random':
                 # choose one random concept for this exercise
                 concepts[np.random.randint(n_concepts)] = 1
-            ex = Exercise(concepts=concepts)
+            ex = exer.Exercise(concepts=concepts)
             exercise_seq.append(ex)
     if not exercise_seq and policy == 'student2':
         '''
@@ -139,7 +136,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         for i in xrange(seqlen):
             concepts = np.zeros((n_concepts,))
             concepts[seq[i]] = 1
-            ex = Exercise(concepts=concepts)
+            ex = exer.Exercise(concepts=concepts)
             exercise_seq.append(ex)
         np.random.shuffle(exercise_seq)
 
@@ -152,7 +149,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         # print (s.knowledge)
         if policy == 'expert':
             concepts = choose_next_concept_with_expert_policy(concept_tree, s.knowledge, verbose=verbose)
-            ex = Exercise(concepts=concepts)
+            ex = exer.Exercise(concepts=concepts)
         else:
             ex = exercise_seq[i]
         result = s.do_exercise(concept_tree, ex)
@@ -235,7 +232,7 @@ def main_test():
     - Generates toy data set with 5 students
     - Loads generated toy data set
     """
-    concept_tree = ConceptDependencyGraph()
+    concept_tree = cdg.ConceptDependencyGraph()
     concept_tree.init_default_tree(n=11)
     print (concept_tree.children)
     print (concept_tree.parents)
@@ -256,7 +253,7 @@ def init_synthetic_data():
     Run this to generate the default synthetic data sets.
     :return:
     """
-    concept_tree = ConceptDependencyGraph()
+    concept_tree = cdg.ConceptDependencyGraph()
     concept_tree.init_default_tree(n=N_CONCEPTS)
     print ("Initializing synthetic data sets...")
     n_students = 10000

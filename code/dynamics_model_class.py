@@ -172,6 +172,7 @@ class RnnStudentSim(object):
             # observation is a probability
             return prob_success_action
 
+
     def advance_simulator(self, action, observation):
         '''
         Given next action and observation, advance the internal hidden state of the simulator.

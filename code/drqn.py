@@ -26,6 +26,7 @@ import random
 from helpers import *
 import utils
 import data_generator as dg
+
 import student as st
 import exercise as exer
 
@@ -34,10 +35,7 @@ from experience_buffer import ExperienceBuffer
 import dataset_utils as d_utils
 import models_dict_utils
 
-
 from joblib import Parallel, delayed
-
-FLAGS = tf.flags.FLAGS
 
 class DRQNModel(object):
     def __init__(self, model_id, timesteps=100):
@@ -69,7 +67,7 @@ class DRQNModel(object):
         self.evaluator = tflearn.Evaluator(q_values, checkpoint)
 
 
-    def predict(self, inputs, last_timestep_only=True):
+    def predict(self, inputs, last_timestep_only=True, exclude_action_0=False):
         """
             First predicts Q-values for the given input sequence and each action.
             Then takes argmax to get best action
@@ -92,10 +90,19 @@ class DRQNModel(object):
 
         q_inputs = self.graph_ops["q_inputs"]
         q_vals = np.array(self.evaluator.predict(feed_dict={q_inputs: inputs}))
-        actions = np.argmax(q_vals, axis=2)
+        if exclude_action_0:
+            actions = np.argmax(q_vals[:,:,1:], axis=2)
+        else:
+            actions = np.argmax(q_vals, axis=2)
 
         if last_timestep_only:
-            return (actions[:, last_timestep], q_vals[:, last_timestep, :])
+            q_vals = q_vals[:, last_timestep]
+            if exclude_action_0:
+                actions = np.argmax(q_vals[:,1:], axis=1) + 1
+            else:
+                actions = np.argmax(q_vals, axis=1)
+            # return (actions[:, last_timestep], q_vals[:, last_timestep, :])
+            return (actions, q_vals)
         return (actions, q_vals)
 
     def init_trainer(self, tensorboard_dir="", save_ckpt_path=""):
@@ -165,11 +172,12 @@ class DRQNModel(object):
 # Now all data can be passed in together.
 def build_drqn_tflearn(inputs, n_hidden, n_actions, reuse=False):
     """
-    :param n_timesteps:
-    :param n_inputdim:
-    :param n_hidden:
-    :param n_actions equivalent to number of actions
-    :return:
+
+    :param inputs: input tensor of shape (n_samples, n_timesteps, 2*n_exercises)
+    :param n_hidden: number of hidden units
+    :param n_actions: number of actions, determines output dimension
+    :param reuse: whether to reuse weights. E.g. when target net shares
+    :return: q_values tensor
     """
     net, hidden_states_1 = tflearn.lstm(inputs, n_hidden, return_seq=True, return_state=True, scope="lstm_1", reuse=reuse)
     q_values = tflearn.lstm(net, n_actions, return_seq=True, activation='linear', scope="lstm_2",reuse=reuse)

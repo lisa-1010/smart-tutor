@@ -68,9 +68,9 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
                 # t = n_timesteps - 2 is last timestep we are considering, since next_knowl is from t+1
                 r = np.mean(next_knowl)
             elif reward_model == "sparse" and t == (n_timesteps - 2):
-                r = np.mean(next_knowl)
-            elif reward_model == "semisparse" and t == (n_timesteps - 2):
                 r = np.prod(next_knowl)
+            elif reward_model == "semisparse" and t == (n_timesteps - 2):
+                r = np.sum(next_knowl)
 
 
             sp = np.zeros(2 * len(next_exer))
@@ -85,6 +85,12 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
 
 
 def preprocess_data_for_rnn(data):
+    """
+    converts the data (sequence of (exercise, performance, knowledge) triples) into the input and output format
+     for the RNN in DKT.
+    :param data:
+    :return:
+    """
     n_students = len(data)
     n_timesteps = len(data[0])
     exer = data[0][0][0]
