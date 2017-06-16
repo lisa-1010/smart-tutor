@@ -312,7 +312,7 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
     
     n_concepts = 4
     use_greedy = False
-    learn_prob = 0.5
+    #learn_prob = 0.5
     horizon = 6
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
@@ -432,85 +432,6 @@ def test_dkt_early_stopping():
     np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores, qs=best_qs)
 
 
-def dkt_pick_best_initialization():
-    '''
-    DEPRECATED
-    Initialize many models and pick based on the training loss.
-    Saves the model to a file along with best training loss, so this can be repeated.
-    '''
-    model_id = 'test2_model_small'
-    dropout = 0.7
-    shuffle = False
-    seqlen = 7 # training data parameter
-    reps = 30
-    total_epochs = 9 # which epoch's training loss to use
-    
-    filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
-    outputstatfile = 'best-loss/{}-dropout{}-epoch{}-{}'.format(model_id, int(dropout * 100), total_epochs, filename)
-    modelfile = 'best-loss/{}-dropout{}-epoch{}-{}-checkpoint'.format(model_id, int(dropout * 100), total_epochs, filename)
-    print('Output stat file: {}'.format(outputstatfile))
-    print('Output model file: {}'.format(modelfile))
-    
-    # load the saved loss if it exists
-    best_loss = None
-    try:
-        with open(outputstatfile) as f:
-            best_loss = pickle.load(f)
-    except:
-        pass
-
-    losses = []
-    
-    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
-    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
-    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
-    
-    for r in xrange(reps):
-        dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
-        ecall = ExtractCallback()
-        dmodel.train(train_data, n_epoch=total_epochs, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
-        last_loss = ecall.tstates[-1].val_loss # use val loss since dropout messes up train loss
-        if best_loss is None or last_loss < best_loss:
-            best_loss = last_loss
-            # save the model
-            dmodel.model.save(modelfile)
-        losses.append(last_loss)
-    
-    # save the best loss
-    with open(outputstatfile, 'w') as f:
-        pickle.dump(best_loss,f)
-
-    print('Losses Encountered')
-    print(losses)
-    print('Best loss {}'.format(best_loss))
-    
-def dkt_train_best_initialization():
-    '''
-    DEPRECATED
-    Load the model saved when picking the best init, and train it some more, leaving the trained model in the normal checkpoints place.
-    '''
-    model_id = 'test2_model_small'
-    
-    dropout = 1.0
-    shuffle = False
-    seqlen = 7 # training data parameter
-    filename = 'test2-n100000-l{}-random-filtered.pickle'.format(seqlen)
-    modelfile = 'best-loss/{}-dropout{}-shuffle{}-{}-checkpoint'.format(model_id, int(dropout * 100), int(shuffle), filename)
-    print('Model file: {}'.format(modelfile))
-    
-    additional_epochs = 1
-    
-    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
-    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
-    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
-    
-
-    dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
-    # load the model
-    dmodel.model.load(modelfile)
-    ecall = ExtractCallback()
-    dmodel.train(train_data, n_epoch=additional_epochs, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
-
 def dkt_train_models(params):
     '''
     Trains a bunch of random restarts of models, checkpointed at various times
@@ -568,66 +489,124 @@ def dkt_train_models(params):
     stats_path = '{}/{}'.format(params.dir_name,params.stat_name)
     np.savez(stats_path,tloss=train_losses, vloss=val_losses,eps=params.saved_epochs)
 
+
+def dkt_test_models_mcts(trainparams,mctsparams):
+    '''
+    Given a set of runs, test the checkpointed models using MCTS
+    '''
+    
+    scores = [[] for _ in six.moves.range(trainparams.num_runs)]
+    qvals = [[] for _ in six.moves.range(trainparams.num_runs)]
+    
+    for r in six.moves.range(trainparams.num_runs):
+        for ep in trainparams.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # load model from checkpoint
+            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            
+            # test dkt
+            score, qval = test_dkt(
+                trainparams.model_id, mctsparams.n_rollouts, mctsparams.n_trajectories,
+                mctsparams.r_type, mctsparams.use_real, chkpt=checkpoint_path)
+            
+            # update stats
+            scores[r].append(score)
+            qvals[r].append(qval)
+            
+    
+    # save stats
+    mctsstat_name = mctsparams.stat_pat.format(trainparams.run_name)
+    mctsstats_path = '{}/{}'.format(trainparams.dir_name,mctsstat_name)
+    np.savez(mctsstats_path, scores=scores, qvals=qvals)
+
+
 if __name__ == '__main__':
     starttime = time.time()
 
     np.random.seed()
     random.seed()
     
-    ######################################
+    ############################################################################
     # testing MCTS and making sure it works when given the true model
     #test_student_exact()
-    ######################################
+    ############################################################################
     
     
-    ######################################
+    ############################################################################
     # General tests where I train a bunch of models and save them
     # then I run analysis on the saved models
-    ######################################
+    ############################################################################
     
-    class TrainParams:
+    class TrainParams(object):
         '''
         Parameters for training models
         '''
-        model_id = 'test2_model_small'
-        r_type = SEMISPARSE
-        dropout = 1.0
-        shuffle = False
-        seqlen = 5
-        datafile = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
-        # which epochs (zero-based) to save, the last saved epoch is the total epoch
-        saved_epochs = [13]
-        # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
-        run_name = 'run'
-        # how many runs
-        num_runs = 20
+        def __init__(self):
+            self.model_id = 'test2_model_small'
+            self.dropout = 1.0
+            self.shuffle = False
+            self.seqlen = 5
+            self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
+            # which epochs (zero-based) to save, the last saved epoch is the total epoch
+            self.saved_epochs = [13]
+            # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
+            self.run_name = 'runB'
+            # how many runs
+            self.num_runs = 90
+
+            # these names are derived from above and should not be touched generally
+            # folder to put the checkpoints into
+            self.dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(
+                self.model_id,int(self.dropout*10),int(self.shuffle),self.datafile)
+            # pattern for the checkpoints
+            self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+            # stat file
+            self.stat_name = 'stats-{}'.format(self.run_name)
         
-        # these names are derived from above and should not be touched generally
-        # folder to put the checkpoints into
-        dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(model_id,int(dropout*10),int(shuffle),datafile)
-        # pattern for the checkpoints
-        checkpoint_pat = 'checkpoint-{}{}-epoch{}'
-        # stat file
-        stat_name = 'stats-{}'.format(run_name)
-        
-        
+    #----------------------------------------------------------------------
     # train and checkpoint the models
-    dkt_train_models(TrainParams)
+    #dkt_train_models(TrainParams())
+    #----------------------------------------------------------------------
     
+    class MCTSParams:
+        '''
+        Parameters for testing models with MCTS
+        '''
+        def __init__(self, use_real=True):
+            self.r_type = SEMISPARSE
+            self.n_rollouts = 1000
+            self.n_trajectories = 100
+            self.use_real = use_real
+            
+            # below are generated values from above
+            # stat filename pattern
+            self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
+                self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
     
-    ######################################
+    #----------------------------------------------------------------------
+    # test the saved models
+    dkt_test_models_mcts(TrainParams(),MCTSParams(use_real=False))
+    #----------------------------------------------------------------------
+    
+    ############################################################################
+    ############################################################################
     
     # test individual models
-    model_id = 'test2_model_small'
-    r_type = SEMISPARSE
-    use_real = False
-    n_rollouts = 300
-    n_trajectories = 100
-    
-    #modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
-    
-    #test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
-    #######################################
+    if False:
+        model_id = 'test2_model_small'
+        r_type = SEMISPARSE
+        use_real = False
+        n_rollouts = 300
+        n_trajectories = 100
+
+        #modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
+
+        test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
+    ############################################################################
 
     endtime = time.time()
     print('Time elapsed {}s'.format(endtime-starttime))
