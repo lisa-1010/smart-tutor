@@ -21,6 +21,7 @@ import os
 
 import constants
 import data_generator as dg
+import concept_dependency_graph as cdg
 import student as st
 import exercise as exer
 import dynamics_model_class as dmc
@@ -431,6 +432,57 @@ def test_dkt_early_stopping():
     
     np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores, qs=best_qs)
 
+def dkt_test_policy(model_id, n_trajectories, r_type, chkpt):
+    '''
+    Tests the optimal open loop policy for student2 n4 on the learned model.
+    '''
+    
+    horizon = 6
+    n_concepts = 4
+    
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
+    
+    student2 = st.Student2(n_concepts)
+    
+    # load model from given file
+    model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
+    model.model.load(chkpt)
+
+    # create the model and simulators
+    student = student2.copy()
+    student.reset()
+    student.knowledge[0] = 1 # initialize the first concept to be known
+    sim = st.StudentExactSim(student, dgraph)
+    
+    # multiple optimal policies
+    opt_policies = [
+        [1,1,2,2,3,3],
+        [1,2,1,2,3,3],
+        [2,1,2,1,3,3],
+        [2,2,1,1,3,3],
+    ]
+    
+    # initialize the shared dktcache across the trials
+    dktcache = dict()
+    
+    reward_acc = 0.0
+    num_policies = len(opt_policies)
+    traj_per_policy = n_trajectories // num_policies
+    
+    for pol in opt_policies:
+        for t in six.moves.range(traj_per_policy):
+            # make the model
+            rnnmodel = dmc.RnnStudentSim(model)
+
+            curr_state = DKTState(rnnmodel, sim, 1, horizon, r_type, dktcache, False)
+            all_actions = curr_state.actions
+            for i in range(horizon):
+                curr_state = curr_state.perform(all_actions[pol[i]])
+            reward_acc += curr_state.reward()
+    
+    return reward_acc / (num_policies * traj_per_policy)
+
 
 def dkt_train_models(params):
     '''
@@ -523,6 +575,34 @@ def dkt_test_models_mcts(trainparams,mctsparams):
     mctsstats_path = '{}/{}'.format(trainparams.dir_name,mctsstat_name)
     np.savez(mctsstats_path, scores=scores, qvals=qvals)
 
+def dkt_test_models_policy(trainparams,mctsparams):
+    '''
+    Given a set of runs, test the optimal policy using the checkpointed models 
+    '''
+    
+    rewards = [[] for _ in six.moves.range(trainparams.num_runs)]
+    
+    for r in six.moves.range(trainparams.num_runs):
+        for ep in trainparams.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # load model from checkpoint
+            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            
+            # test dkt
+            reward_avg = dkt_test_policy(trainparams.model_id, mctsparams.n_trajectories, mctsparams.r_type, checkpoint_path)
+            
+            # update stats
+            rewards[r].append(reward_avg)
+            
+    
+    # save stats
+    policystat_name = mctsparams.policy_pat.format(trainparams.run_name)
+    policystats_path = '{}/{}'.format(trainparams.dir_name,policystat_name)
+    np.savez(policystats_path, rewards=rewards)
 
 if __name__ == '__main__':
     starttime = time.time()
@@ -572,13 +652,13 @@ if __name__ == '__main__':
     #dkt_train_models(TrainParams())
     #----------------------------------------------------------------------
     
-    class MCTSParams:
+    class TestParams:
         '''
-        Parameters for testing models with MCTS
+        Parameters for testing models with MCTS/policies
         '''
         def __init__(self, use_real=True):
             self.r_type = SEMISPARSE
-            self.n_rollouts = 1000
+            self.n_rollouts = 3000
             self.n_trajectories = 100
             self.use_real = use_real
             
@@ -586,26 +666,17 @@ if __name__ == '__main__':
             # stat filename pattern
             self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
                 self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
+            # stat filename for policy testing
+            self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
+                self.r_type, self.n_trajectories)
     
     #----------------------------------------------------------------------
     # test the saved models
-    dkt_test_models_mcts(TrainParams(),MCTSParams(use_real=False))
+    dkt_test_models_mcts(TrainParams(),TestParams(use_real=True))
+    #dkt_test_models_policy(TrainParams(),TestParams())
     #----------------------------------------------------------------------
     
     ############################################################################
-    ############################################################################
-    
-    # test individual models
-    if False:
-        model_id = 'test2_model_small'
-        r_type = SEMISPARSE
-        use_real = False
-        n_rollouts = 300
-        n_trajectories = 100
-
-        #modelfile = 'best-loss/{}-dropout70-epoch9-test2-n100000-l7-random-filtered.pickle-checkpoint'.format(model_id)
-
-        test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
     ############################################################################
 
     endtime = time.time()
