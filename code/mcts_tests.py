@@ -346,6 +346,64 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
     print('Average best q: {}'.format(avg_best_q))
     return avg_acc, avg_best_q
 
+def test_dkt_qval(model_id, n_rollouts, r_type, chkpt=None):
+    '''
+    Test DKT+MCTS with loads of rollouts to estimate the initial qval
+    '''
+    import concept_dependency_graph as cdg
+    from simple_mdp import create_custom_dependency
+    
+    n_concepts = 4
+    use_greedy = False
+    #learn_prob = 0.5
+    horizon = 6
+
+    #dgraph = create_custom_dependency()
+
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
+
+    #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    student2 = st.Student2(n_concepts)
+    test_student = student2
+    
+    # load the model
+    if chkpt is not None:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
+        model.model.load(chkpt)
+    else:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    # initialize the dktcache to speed up DKT queries
+    dktcache = dict()
+
+    print('Testing model qval: {}'.format(model_id))
+    print('horizon: {}'.format(horizon))
+    print('rollouts: {}'.format(n_rollouts))
+    
+    # create the model and simulators
+    stu = test_student.copy()
+    stu.reset()
+    stu.knowledge[0] = 1 # initialize the first concept to be known
+    sim = st.StudentExactSim(stu, dgraph)
+
+    # make the model
+    dktmodel = dmc.RnnStudentSim(model)
+
+    #rollout_policy = default_policies.immediate_reward
+    rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
+    uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
+               backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
+
+    root = StateNode(None, DKTState(dktmodel, sim, 1, horizon, r_type, dktcache, False))
+    # run MCTS
+    best_action = uct(root, n=n_rollouts)
+    # get qvalue at the root
+    qval = root.q
+    
+    six.print_('Initial qval: {}'.format(qval))
+
+    return qval
+
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
     Used to get the training/validation losses after model.fit.
@@ -575,6 +633,36 @@ def dkt_test_models_mcts(trainparams,mctsparams):
     mctsstats_path = '{}/{}'.format(trainparams.dir_name,mctsstat_name)
     np.savez(mctsstats_path, scores=scores, qvals=qvals)
 
+def dkt_test_models_mcts_qval(trainparams,mctsparams):
+    '''
+    Given a set of runs, test the checkpointed models initial state's qval using loads of MCTS rollouts
+    '''
+    qvals = [[] for _ in six.moves.range(trainparams.num_runs)]
+    
+    for r in six.moves.range(trainparams.num_runs):
+        for ep in trainparams.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # load model from checkpoint
+            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            
+            # test dkt
+            qval = test_dkt_qval(
+                trainparams.model_id, mctsparams.initialq_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
+            
+            # update stats
+            qvals[r].append(qval)
+            
+    
+    # save stats
+    stat_name = mctsparams.initialq_pat.format(trainparams.run_name)
+    mctsstats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
+    np.savez(mctsstats_path, qvals=qvals)
+
+
 def dkt_test_models_policy(trainparams,mctsparams):
     '''
     Given a set of runs, test the optimal policy using the checkpointed models 
@@ -627,16 +715,16 @@ if __name__ == '__main__':
         '''
         def __init__(self):
             self.model_id = 'test2_model_small'
-            self.dropout = 1.0
+            self.dropout = 0.8
             self.shuffle = False
             self.seqlen = 5
             self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [13]
+            self.saved_epochs = [23]
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
-            self.run_name = 'runB'
+            self.run_name = 'runD'
             # how many runs
-            self.num_runs = 90
+            self.num_runs = 50
 
             # these names are derived from above and should not be touched generally
             # folder to put the checkpoints into
@@ -659,8 +747,10 @@ if __name__ == '__main__':
         def __init__(self, use_real=True):
             self.r_type = SEMISPARSE
             self.n_rollouts = 3000
-            self.n_trajectories = 100
+            self.n_trajectories = 400
             self.use_real = use_real
+            
+            self.initialq_n_rollouts = 100000
             
             # below are generated values from above
             # stat filename pattern
@@ -669,11 +759,16 @@ if __name__ == '__main__':
             # stat filename for policy testing
             self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
                 self.r_type, self.n_trajectories)
+            # state filename for initial qval teseting
+            self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
+                self.r_type, self.initialq_n_rollouts)
     
     #----------------------------------------------------------------------
     # test the saved models
-    dkt_test_models_mcts(TrainParams(),TestParams(use_real=True))
+    #dkt_test_models_mcts(TrainParams(),TestParams(use_real=True))
+    #dkt_test_models_mcts(TrainParams(),TestParams(use_real=False))
     #dkt_test_models_policy(TrainParams(),TestParams())
+    dkt_test_models_mcts_qval(TrainParams(),TestParams())
     #----------------------------------------------------------------------
     
     ############################################################################
