@@ -404,6 +404,69 @@ def test_dkt_qval(model_id, n_rollouts, r_type, chkpt=None):
 
     return qval
 
+
+def test_dkt_extract_policy(model_id, n_rollouts, r_type, chkpt=None):
+    '''
+    Test DKT+MCTS with loads of rollouts to estimate the initial qval
+    '''
+    import concept_dependency_graph as cdg
+    from simple_mdp import create_custom_dependency
+    
+    n_concepts = 4
+    use_greedy = False
+    #learn_prob = 0.5
+    horizon = 6
+
+    #dgraph = create_custom_dependency()
+
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
+
+    #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    student2 = st.Student2(n_concepts)
+    test_student = student2
+    
+    # load the model
+    if chkpt is not None:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
+        model.model.load(chkpt)
+    else:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    # initialize the dktcache to speed up DKT queries
+    dktcache = dict()
+
+    print('Extracting policy from model: {}'.format(model_id))
+    print('horizon: {}'.format(horizon))
+    print('rollouts: {}'.format(n_rollouts))
+    
+    # create the model and simulators
+    stu = test_student.copy()
+    stu.reset()
+    stu.knowledge[0] = 1 # initialize the first concept to be known
+    sim = st.StudentExactSim(stu, dgraph)
+
+    # make the model
+    dktmodel = dmc.RnnStudentSim(model)
+
+    #rollout_policy = default_policies.immediate_reward
+    rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
+    uct = MCTS(tree_policies.UCB1(1.41), rollout_policy,
+               backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
+
+    root = StateNode(None, DKTState(dktmodel, sim, 1, horizon, r_type, dktcache, True))
+    optpolicy = []
+    for i in range(horizon):
+        best_action = uct(root, n=n_rollouts)
+        optpolicy.append(best_action.concept)
+        # act in the real environment
+        new_root = root.children[best_action].sample_state(real_world=True)
+        new_root.parent = None # cutoff the rest of the tree
+        root = new_root
+    
+    six.print_('Extracted policy: {}'.format(optpolicy))
+
+    return optpolicy
+
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
     Used to get the training/validation losses after model.fit.
@@ -662,6 +725,34 @@ def dkt_test_models_mcts_qval(trainparams,mctsparams):
     mctsstats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
     np.savez(mctsstats_path, qvals=qvals)
 
+def dkt_test_models_extract_policy(trainparams,mctsparams):
+    '''
+    Given a set of runs, use MCTS to extrac their policy
+    '''
+    optpolicies = [[] for _ in six.moves.range(trainparams.num_runs)]
+    
+    for r in six.moves.range(trainparams.num_runs):
+        for ep in trainparams.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # load model from checkpoint
+            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            
+            # test dkt
+            optpolicy = test_dkt_extract_policy(
+                trainparams.model_id, mctsparams.policy_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
+            
+            # update stats
+            optpolicies[r].append(optpolicy)
+            
+    
+    # save stats
+    stat_name = mctsparams.optpolicy_pat.format(trainparams.run_name)
+    mctsstats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
+    np.savez(mctsstats_path, opts=optpolicies)
 
 def dkt_test_models_policy(trainparams,mctsparams):
     '''
@@ -750,7 +841,11 @@ if __name__ == '__main__':
             self.n_trajectories = 400
             self.use_real = use_real
             
+            # for testing initialq values
             self.initialq_n_rollouts = 100000
+            
+            # for extracting a policy
+            self.policy_n_rollouts = 10000
             
             # below are generated values from above
             # stat filename pattern
@@ -762,13 +857,17 @@ if __name__ == '__main__':
             # state filename for initial qval teseting
             self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
                 self.r_type, self.initialq_n_rollouts)
+            
+            # stat for extracting a policy
+            self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
+                self.r_type, self.policy_n_rollouts)
     
     #----------------------------------------------------------------------
     # test the saved models
     #dkt_test_models_mcts(TrainParams(),TestParams(use_real=True))
-    #dkt_test_models_mcts(TrainParams(),TestParams(use_real=False))
     #dkt_test_models_policy(TrainParams(),TestParams())
-    dkt_test_models_mcts_qval(TrainParams(),TestParams())
+    #dkt_test_models_mcts_qval(TrainParams(),TestParams())
+    dkt_test_models_extract_policy(TrainParams(),TestParams())
     #----------------------------------------------------------------------
     
     ############################################################################
