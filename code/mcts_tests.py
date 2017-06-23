@@ -407,7 +407,7 @@ def test_dkt_qval(model_id, n_rollouts, r_type, chkpt=None):
 
 def test_dkt_extract_policy(model_id, n_rollouts, r_type, chkpt=None):
     '''
-    Test DKT+MCTS with loads of rollouts to estimate the initial qval
+    Test DKT+MCTS to extract out the policy used in the real domain. Also return the qvals.
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
@@ -454,18 +454,25 @@ def test_dkt_extract_policy(model_id, n_rollouts, r_type, chkpt=None):
                backups.monte_carlo) # 1.41 is sqrt (2), backups is from mcts.py
 
     root = StateNode(None, DKTState(dktmodel, sim, 1, horizon, r_type, dktcache, True))
+    
     optpolicy = []
+    qfunc = []
+    
     for i in range(horizon):
         best_action = uct(root, n=n_rollouts)
         optpolicy.append(best_action.concept)
+        qfunc.append([])
+        for student_action in root.state.actions:
+            qfunc[-1].append(root.children[student_action].q)
         # act in the real environment
         new_root = root.children[best_action].sample_state(real_world=True)
         new_root.parent = None # cutoff the rest of the tree
         root = new_root
     
     six.print_('Extracted policy: {}'.format(optpolicy))
+    six.print_('Extracted q function: {}'.format(qfunc))
 
-    return optpolicy
+    return optpolicy, qfunc
 
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
@@ -730,6 +737,7 @@ def dkt_test_models_extract_policy(trainparams,mctsparams):
     Given a set of runs, use MCTS to extrac their policy
     '''
     optpolicies = [[] for _ in six.moves.range(trainparams.num_runs)]
+    qfuncs = [[] for _ in six.moves.range(trainparams.num_runs)]
     
     for r in six.moves.range(trainparams.num_runs):
         for ep in trainparams.saved_epochs:
@@ -742,17 +750,18 @@ def dkt_test_models_extract_policy(trainparams,mctsparams):
             checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
             
             # test dkt
-            optpolicy = test_dkt_extract_policy(
+            optpolicy, qfunc = test_dkt_extract_policy(
                 trainparams.model_id, mctsparams.policy_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
             
             # update stats
             optpolicies[r].append(optpolicy)
+            qfuncs[r].append(qfunc)
             
     
     # save stats
     stat_name = mctsparams.optpolicy_pat.format(trainparams.run_name)
     mctsstats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
-    np.savez(mctsstats_path, opts=optpolicies)
+    np.savez(mctsstats_path, opts=optpolicies, qs=qfuncs)
 
 def dkt_test_models_policy(trainparams,mctsparams):
     '''
@@ -804,7 +813,7 @@ if __name__ == '__main__':
         '''
         Parameters for training models
         '''
-        def __init__(self):
+        def __init__(self, rname, nruns):
             self.model_id = 'test2_model_small'
             self.dropout = 0.8
             self.shuffle = False
@@ -813,9 +822,9 @@ if __name__ == '__main__':
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
             self.saved_epochs = [23]
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
-            self.run_name = 'runD'
+            self.run_name = rname
             # how many runs
-            self.num_runs = 50
+            self.num_runs = nruns
 
             # these names are derived from above and should not be touched generally
             # folder to put the checkpoints into
@@ -828,6 +837,8 @@ if __name__ == '__main__':
         
     #----------------------------------------------------------------------
     # train and checkpoint the models
+    cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
+    
     #dkt_train_models(TrainParams())
     #----------------------------------------------------------------------
     
@@ -864,10 +875,12 @@ if __name__ == '__main__':
     
     #----------------------------------------------------------------------
     # test the saved models
+    tp = TestParams()
     #dkt_test_models_mcts(TrainParams(),TestParams(use_real=True))
     #dkt_test_models_policy(TrainParams(),TestParams())
     #dkt_test_models_mcts_qval(TrainParams(),TestParams())
-    dkt_test_models_extract_policy(TrainParams(),TestParams())
+    for ct in cur_train:
+        dkt_test_models_extract_policy(ct,tp)
     #----------------------------------------------------------------------
     
     ############################################################################
