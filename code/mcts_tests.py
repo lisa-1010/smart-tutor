@@ -611,6 +611,52 @@ def dkt_test_policy(model_id, n_trajectories, r_type, chkpt):
     
     return reward_acc / (num_policies * traj_per_policy)
 
+def dkt_test_policies_rme(model_id, n_trajectories, r_type, policies, chkpt):
+    '''
+    Tests a given open loop policy for student2 n4 on the learned model.
+    '''
+    
+    horizon = 6
+    n_concepts = 4
+    
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
+    
+    student2 = st.Student2(n_concepts)
+    
+    # load model from given file
+    model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
+    model.model.load(chkpt)
+
+    # create the model and simulators
+    student = student2.copy()
+    student.reset()
+    student.knowledge[0] = 1 # initialize the first concept to be known
+    sim = st.StudentExactSim(student, dgraph)
+    
+    # initialize the shared dktcache across the trials
+    dktcache = dict()
+    
+    num_policies = len(policies)
+    rewards = np.zeros((num_policies,))
+    traj_per_policy = n_trajectories
+    
+    for pix in six.moves.range(num_policies):
+        pol = policies[pix]
+        reward_acc = 0.0
+        for t in six.moves.range(traj_per_policy):
+            # make the model
+            rnnmodel = dmc.RnnStudentSim(model)
+
+            curr_state = DKTState(rnnmodel, sim, 1, horizon, r_type, dktcache, False)
+            all_actions = curr_state.actions
+            for i in range(horizon):
+                curr_state = curr_state.perform(all_actions[pol[i]])
+            reward_acc += curr_state.reward()
+        rewards[pix] = reward_acc / traj_per_policy
+    
+    return rewards
+
 
 def dkt_train_models(params):
     '''
@@ -792,6 +838,35 @@ def dkt_test_models_policy(trainparams,mctsparams):
     policystats_path = '{}/{}'.format(trainparams.dir_name,policystat_name)
     np.savez(policystats_path, rewards=rewards)
 
+def dkt_test_models_rme(trainparams,mctsparams,policies):
+    '''
+    Given a set of runs, test a given set of policies corresponding to a robust matrix evaluation.
+    '''
+    
+    rewards = np.zeros((trainparams.num_runs, len(policies)))
+    
+    for r in six.moves.range(trainparams.num_runs):
+        for ep in trainparams.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # load model from checkpoint
+            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            
+            # test dkt
+            curr_rewards = dkt_test_policies_rme(trainparams.model_id, mctsparams.rme_n_trajectories, mctsparams.r_type, policies, checkpoint_path)
+            
+            # update stats
+            rewards[r,:] = curr_rewards
+    
+    # save stats
+    rmestat_name = mctsparams.rme_pat.format(trainparams.run_name)
+    rmestats_path = '{}/{}'.format(trainparams.dir_name,rmestat_name)
+    np.savez(rmestats_path, evals=rewards)
+
+
 if __name__ == '__main__':
     starttime = time.time()
 
@@ -815,12 +890,12 @@ if __name__ == '__main__':
         '''
         def __init__(self, rname, nruns):
             self.model_id = 'test2_model_small'
-            self.dropout = 0.8
+            self.dropout = 1.0
             self.shuffle = False
             self.seqlen = 5
             self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [60]
+            self.saved_epochs = [13]
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -840,9 +915,10 @@ if __name__ == '__main__':
     
     # dropout 8 data
     #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
-    cur_train = [TrainParams('runB', 30)]
+    #cur_train = [TrainParams('runB', 30)]
     
     # dropout 10 data
+    cur_train = [TrainParams('runA', 10)]
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     #dkt_train_models(TrainParams())
@@ -864,6 +940,9 @@ if __name__ == '__main__':
             # for extracting a policy
             self.policy_n_rollouts = 20000
             
+            # for rme
+            self.rme_n_trajectories = 100
+            
             # below are generated values from above
             # stat filename pattern
             self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
@@ -878,6 +957,10 @@ if __name__ == '__main__':
             # stat for extracting a policy
             self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
                 self.r_type, self.policy_n_rollouts)
+            
+            # stat for robust matrix evaluation
+            self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
+                self.r_type, self.rme_n_trajectories)
     
     #----------------------------------------------------------------------
     # test the saved models
@@ -886,8 +969,9 @@ if __name__ == '__main__':
     #dkt_test_models_policy(TrainParams(),TestParams())
     #dkt_test_models_mcts_qval(TrainParams(),TestParams())
     for ct in cur_train:
-        dkt_test_models_mcts_qval(ct,tp)
-        dkt_test_models_extract_policy(ct,tp)
+        dkt_test_models_rme(ct,tp,[[1,1,2,2,3,3],[1,1,3,3,2,2]])
+        #dkt_test_models_mcts_qval(ct,tp)
+        #dkt_test_models_extract_policy(ct,tp)
     #----------------------------------------------------------------------
     
     ############################################################################
