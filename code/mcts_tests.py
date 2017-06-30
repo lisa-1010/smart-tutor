@@ -820,7 +820,7 @@ if __name__ == '__main__':
             self.seqlen = 5
             self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [23]
+            self.saved_epochs = [60]
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -837,7 +837,13 @@ if __name__ == '__main__':
         
     #----------------------------------------------------------------------
     # train and checkpoint the models
-    cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
+    
+    # dropout 8 data
+    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
+    cur_train = [TrainParams('runB', 30)]
+    
+    # dropout 10 data
+    #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     #dkt_train_models(TrainParams())
     #----------------------------------------------------------------------
@@ -856,7 +862,7 @@ if __name__ == '__main__':
             self.initialq_n_rollouts = 100000
             
             # for extracting a policy
-            self.policy_n_rollouts = 10000
+            self.policy_n_rollouts = 20000
             
             # below are generated values from above
             # stat filename pattern
@@ -880,6 +886,7 @@ if __name__ == '__main__':
     #dkt_test_models_policy(TrainParams(),TestParams())
     #dkt_test_models_mcts_qval(TrainParams(),TestParams())
     for ct in cur_train:
+        dkt_test_models_mcts_qval(ct,tp)
         dkt_test_models_extract_policy(ct,tp)
     #----------------------------------------------------------------------
     
