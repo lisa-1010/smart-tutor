@@ -637,12 +637,12 @@ def dkt_test_policies_rme(model_id, n_trajectories, r_type, policies, chkpt):
     # initialize the shared dktcache across the trials
     dktcache = dict()
     
-    num_policies = len(policies)
+    num_policies = policies.shape[0]
     rewards = np.zeros((num_policies,))
     traj_per_policy = n_trajectories
     
     for pix in six.moves.range(num_policies):
-        pol = policies[pix]
+        pol = policies[pix,:]
         reward_acc = 0.0
         for t in six.moves.range(traj_per_policy):
             # make the model
@@ -890,12 +890,12 @@ if __name__ == '__main__':
         '''
         def __init__(self, rname, nruns):
             self.model_id = 'test2_model_small'
-            self.dropout = 1.0
+            self.dropout = 0.8
             self.shuffle = False
             self.seqlen = 5
             self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [13]
+            self.saved_epochs = [23]
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -914,11 +914,11 @@ if __name__ == '__main__':
     # train and checkpoint the models
     
     # dropout 8 data
-    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
+    cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
     #cur_train = [TrainParams('runB', 30)]
     
     # dropout 10 data
-    cur_train = [TrainParams('runA', 10)]
+    #cur_train = [TrainParams('runA', 10)]
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     #dkt_train_models(TrainParams())
@@ -941,7 +941,7 @@ if __name__ == '__main__':
             self.policy_n_rollouts = 20000
             
             # for rme
-            self.rme_n_trajectories = 100
+            self.rme_n_trajectories = 500
             
             # below are generated values from above
             # stat filename pattern
@@ -964,12 +964,26 @@ if __name__ == '__main__':
     
     #----------------------------------------------------------------------
     # test the saved models
+    
+    # read the optpolicies from data
+    if True:
+        data1 = np.load('experiments/test2_model_small-dropout10-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runA.npz')
+        data2 = np.load('experiments/test2_model_small-dropout10-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runB.npz')
+        opts = np.vstack([data1['opts'],data2['opts']])[:,0,:]
+        
+        data61 = np.load('experiments/test2_model_small-dropout8-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runA.npz')
+        data62 = np.load('experiments/test2_model_small-dropout8-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runC.npz')
+        data63 = np.load('experiments/test2_model_small-dropout8-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runD.npz')
+        opts2 = np.vstack([data61['opts'],data62['opts'],data63['opts']])[:,0,:]
+
+    
     tp = TestParams()
     #dkt_test_models_mcts(TrainParams(),TestParams(use_real=True))
     #dkt_test_models_policy(TrainParams(),TestParams())
     #dkt_test_models_mcts_qval(TrainParams(),TestParams())
     for ct in cur_train:
-        dkt_test_models_rme(ct,tp,[[1,1,2,2,3,3],[1,1,3,3,2,2]])
+        pass
+        dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
     #----------------------------------------------------------------------
