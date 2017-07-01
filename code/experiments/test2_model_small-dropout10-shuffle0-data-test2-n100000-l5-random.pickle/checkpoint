@@ -1,0 +1,4 @@
+model_checkpoint_path: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2_model_small-dropout10-shuffle0-data-test2-n100000-l5-random.pickle/checkpoint-runB89-epoch13"
+all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2_model_small/_-18291"
+all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2_model_small/_-19698"
+all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2_model_small-dropout10-shuffle0-data-test2-n100000-l5-random.pickle/checkpoint-runB89-epoch13"
