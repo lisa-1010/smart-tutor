@@ -187,7 +187,7 @@ class DKTState(object):
         # and it is advanced only when real_world_perform is called
         # so all references to it will all be advanced
         self.sim = sim
-        self.n_concepts = sim.student.knowledge.shape[0]
+        self.n_concepts = sim.dgraph.n
         
         # setup caching rnn queries
         self.dktcache = dktcache
@@ -212,7 +212,7 @@ class DKTState(object):
                 # actually run it and update the cache
                 trycache = self.belief.sample_observations()
                 if trycache is None:
-                    trycache = [0.0] * self.sim.dgraph.n
+                    trycache = np.array([0.0] * self.sim.dgraph.n)
                     trycache[0] = 1.0
             # cache back
             self.dktcache[self.histhash] = trycache

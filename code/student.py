@@ -30,6 +30,8 @@ from collections import defaultdict, deque, Counter
 from constants import *
 import exercise as exer
 
+import dynamics_model_class as dmc
+
 
 class Student(object):
     def __init__(self, n=None, p_trans_satisfied=0.5, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0, initial_knowledge=0):
@@ -187,6 +189,9 @@ class StudentExactSim(object):
         reward = np.sum(self.student.knowledge)
         ob = self.student.do_exercise(self.dgraph, exer.Exercise(action.conceptvec))
         return (ob, reward)
+    
+    def get_knowledge(self):
+        return self.student.knowledge
 
     def copy(self):
         '''
@@ -211,3 +216,61 @@ class StudentAction(object):
 
     def __hash__(self):
         return self.concept
+
+class StudentDKTSim(object):
+    '''
+    A model-based simulator for a student. Maintains its own internal history. This wraps around a DKT, which is maintained in a separate process in order to not conflict with stuff in the current thread. Also uses a cache to help speed things up.
+    '''
+
+    def __init__(self, dgraph, dmcmodel, dktcache, histhash=''):
+        '''
+        Wraps around a given model (could be a proxy from a Manager or not)
+        '''
+        self.dgraph = dgraph
+        self.dkt = dmc.RnnStudentSim(dmcmodel)
+        self.dktcache = dktcache
+        self.histhash = histhash
+    
+    def _next_histhash(self, new_act, new_ob):
+        return self.histhash + '{}{};'.format(new_act, new_ob)
+
+    def get_probs(self):
+        # computes and caches the probs for the current state
+        # try the dktcache
+        trycache = self.dktcache.get(self.histhash, None)
+
+        if trycache is None:
+            # actually run it and update the cache
+            trycache = self.dkt.sample_observations()
+            if trycache is None:
+                trycache = np.array([0.0] * self.dgraph.n)
+                trycache[0] = 1.0
+                # cache back
+                self.dktcache[self.histhash] = trycache
+        return trycache
+    
+    def get_knowledge(self):
+        return self.get_probs()
+    
+    def advance_simulator(self, action):
+        '''
+        Given next action, simulate the student and advance the simulator.
+        :param action: StudentAction object
+        :return: an observation and reward
+        '''
+        probs = self.get_probs()
+        # for now, the reward is a full posttest
+        reward = np.sum(probs)
+        ob = 1 if np.random.random() < probs[action.concept] else 0
+        # advance the simulator
+        self.histhash = self._next_histhash(action.concept,ob)
+        self.dkt.advance_simulator(action,ob)
+        return (ob, reward)
+
+    def copy(self):
+        '''
+        Make a copy of the current simulator.
+        '''
+        new_copy = StudentDKTSim(self.dgraph, self.dkt.model, self.dktcache, self.histhash)
+        new_copy.dkt = self.dkt.copy()
+        return new_copy

@@ -20,6 +20,8 @@ import datetime
 import tensorflow as tf
 import tflearn
 import numpy as np
+import multiprocessing as mp
+from multiprocessing.managers import BaseManager
 
 import utils
 import dataset_utils as d_utils
@@ -34,47 +36,54 @@ n_outputdim = 10
 
 class DynamicsModel(object):
 
-    def __init__(self, model_id, timesteps=100, dropout=0.5, load_checkpoint=False):
+    def __init__(self, model_id, timesteps=100, dropout=0.5, load_checkpoint=False, use_sess=False):
         print('Loading RNN dynamics model...')
 
         # if timesteps:
         #     # if provided as an argument, overwrite n_timesteps from the model
         #     n_timesteps = timesteps
-        tf.reset_default_graph()
-        self.timesteps = timesteps
-        self.model_dict = models_dict_utils.load_model_dict(model_id)
-        self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
-                                                                                 n_inputdim=self.model_dict["n_inputdim"],
-                                                                                 n_hidden=self.model_dict["n_hidden"],
-                                                                                 n_outputdim=self.model_dict["n_outputdim"],
-                                                                                 dropout=dropout)
-        # the number of units in the memory c of lstm
-        self.hidden_c_size = self.hidden_1[0].shape[1]
-        # the number of units in the hidden units of lstm
-        self.hidden_h_size = self.hidden_1[0].shape[1]
+        self._tfgraph = tf.Graph()
+        self._sess = None
+        #if use_sess:
+        #    # use session
+        #    self._sess = tf.Session(graph=self.tfgraph)
         
-        tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
-        checkpoint_dir = '../checkpoints/' + model_id + '/'
-        checkpoint_path = checkpoint_dir + '_/'
-        print("Directory path for tensorboard summaries: {}".format(tensorboard_dir))
-        print("Checkpoint directory path: {}".format(checkpoint_dir))
+        with self._tfgraph.as_default():
+            #tf.reset_default_graph()
+            self.timesteps = timesteps
+            self.model_dict = models_dict_utils.load_model_dict(model_id)
+            self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
+                                                                                     n_inputdim=self.model_dict["n_inputdim"],
+                                                                                     n_hidden=self.model_dict["n_hidden"],
+                                                                                     n_outputdim=self.model_dict["n_outputdim"],
+                                                                                     dropout=dropout)
+            # the number of units in the memory c of lstm
+            self.hidden_c_size = self.hidden_1[0].shape[1]
+            # the number of units in the hidden units of lstm
+            self.hidden_h_size = self.hidden_1[0].shape[1]
 
-        utils.check_if_path_exists_or_create(tensorboard_dir)
-        utils.check_if_path_exists_or_create(checkpoint_dir)
+            tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
+            checkpoint_dir = '../checkpoints/' + model_id + '/'
+            checkpoint_path = checkpoint_dir + '_/'
+            print("Directory path for tensorboard summaries: {}".format(tensorboard_dir))
+            print("Checkpoint directory path: {}".format(checkpoint_dir))
 
-        self.model = tflearn.DNN(self.net, tensorboard_verbose=2, tensorboard_dir=tensorboard_dir, \
-                                checkpoint_path=checkpoint_path, max_checkpoints=3)
+            utils.check_if_path_exists_or_create(tensorboard_dir)
+            utils.check_if_path_exists_or_create(checkpoint_dir)
 
-        if load_checkpoint:
-            checkpoint = tf.train.latest_checkpoint(checkpoint_dir)  # can be none of no checkpoint exists
-            print ("Checkpoint filename: " + checkpoint)
-            if checkpoint:
-                self.model.load(checkpoint, weights_only=True, verbose=True)
-                print('Checkpoint loaded.')
-            else:
-                print('No checkpoint found. ')
+            self._model = tflearn.DNN(self.net, tensorboard_verbose=2, tensorboard_dir=tensorboard_dir, \
+                                    checkpoint_path=checkpoint_path, max_checkpoints=3)
 
-        print('Model loaded.')
+            if load_checkpoint:
+                checkpoint = tf.train.latest_checkpoint(checkpoint_dir)  # can be none of no checkpoint exists
+                print ("Checkpoint filename: " + checkpoint)
+                if checkpoint:
+                    self.model.load(checkpoint, weights_only=True, verbose=True)
+                    print('Checkpoint loaded.')
+                else:
+                    print('No checkpoint found. ')
+
+            print('Model loaded.')
 
     def _build_regression_lstm_net(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=0.5):
@@ -101,6 +110,15 @@ class DynamicsModel(object):
                                  loss='mean_square')
         return net, hidden_states_1, None
 
+    def load(self, s):
+        with self._tfgraph.as_default():
+            #tf.reset_default_graph()
+            self._model.load(s)
+    
+    def save(self, s):
+        with self._tfgraph.as_default():
+            #tf.reset_default_graph()
+            self._model.save(s)
 
     def train(self, train_data, n_epoch=64, callbacks=[], shuffle=None, load_checkpoint=True):
         """
@@ -110,11 +128,12 @@ class DynamicsModel(object):
         :param load_checkpoint: whether to train from checkpoint or from scratch
         :return:
         """
-        input_data, output_mask, output_data = train_data
-        tf.reset_default_graph()
-        date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-        run_id = "{}".format(date_time_string)
-        self.model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=0.1, run_id=run_id, callbacks=callbacks, shuffle=shuffle)
+        with self._tfgraph.as_default():
+            input_data, output_mask, output_data = train_data
+            tf.reset_default_graph()
+            date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+            run_id = "{}".format(date_time_string)
+            self._model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=0.1, run_id=run_id, callbacks=callbacks, shuffle=shuffle)
 
 
     def predict(self, input_data):
@@ -122,23 +141,35 @@ class DynamicsModel(object):
         :param input_data: of shape (n_samples, n_timesteps, n_inputdim).
         :return:
         """
-        n_samples, n_timesteps, n_inputdim = input_data.shape
-        assert(n_inputdim == self.model_dict["n_inputdim"]), "input dimension of data doesn't match the model."
-        n_outputdim = self.model_dict["n_outputdim"]
-        output_mask = np.ones((n_samples, n_timesteps, n_outputdim))
-        if n_timesteps < self.timesteps:  # pad inputs and mask
-            padded_input = np.zeros((n_samples, self.timesteps, n_inputdim))
-            padded_input[:, :n_timesteps, :] = input_data[:, :, :]
-            input_data = padded_input
-            padded_mask = np.zeros((n_samples, self.timesteps, n_outputdim))
-            padded_mask[:,:n_timesteps,:] = output_mask[:,:,:]
-            output_mask = padded_mask
-        elif n_timesteps > self.timesteps: # truncate inputs and mask
-            input_data = input_data[:, :self.timesteps, :]
-            output_mask = output_mask[:, :self.timesteps, :]
-        tf.reset_default_graph()
-        return self.model.predict([input_data, output_mask])
+        with self._tfgraph.as_default():
+            n_samples, n_timesteps, n_inputdim = input_data.shape
+            assert(n_inputdim == self.model_dict["n_inputdim"]), "input dimension of data doesn't match the model."
+            n_outputdim = self.model_dict["n_outputdim"]
+            output_mask = np.ones((n_samples, n_timesteps, n_outputdim))
+            if n_timesteps < self.timesteps:  # pad inputs and mask
+                padded_input = np.zeros((n_samples, self.timesteps, n_inputdim))
+                padded_input[:, :n_timesteps, :] = input_data[:, :, :]
+                input_data = padded_input
+                padded_mask = np.zeros((n_samples, self.timesteps, n_outputdim))
+                padded_mask[:,:n_timesteps,:] = output_mask[:,:,:]
+                output_mask = padded_mask
+            elif n_timesteps > self.timesteps: # truncate inputs and mask
+                input_data = input_data[:, :self.timesteps, :]
+                output_mask = output_mask[:, :self.timesteps, :]
+            #tf.reset_default_graph()
+            return self._model.predict([input_data, output_mask])
+    
+    def get_timesteps(self):
+        return self.timesteps
 
+
+class DMCManager(BaseManager):
+    '''
+    Allows to create DynamicsModel objects in a separate process.
+    '''
+    pass
+
+DMCManager.register('DynamicsModel', DynamicsModel)
 
 class RnnStudentSim(object):
     '''
@@ -149,7 +180,7 @@ class RnnStudentSim(object):
 
     def __init__(self, model):
         self.model = model
-        self.seq_max_len = model.timesteps
+        self.seq_max_len = model.get_timesteps()
         self.sequence = [] # will store up to seq_max_len
         pass
 

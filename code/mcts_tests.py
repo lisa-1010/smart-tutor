@@ -93,11 +93,11 @@ def test_student_exact_single(dgraph, stud, horizon, n_rollouts, r_type):
         # debug check for whether action is optimal
 
         if False:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
+            opt_acts = compute_optimal_actions(sim.dgraph, sim.get_knowledge())
             is_opt = best_action.concept in opt_acts  # check if predicted action is optimal
 
             if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action.concept))
+                print('ERROR {} executed non-optimal action {}'.format(sim.get_knowledge(), best_action.concept))
                 # now let's print out even more debugging information
                 #breadth_first_search(root, fnc=debug_visiter)
                 #return None
@@ -107,7 +107,7 @@ def test_student_exact_single(dgraph, stud, horizon, n_rollouts, r_type):
         new_root.parent = None # cutoff the rest of the tree
         root = new_root
         #print('Next state: {}'.format(str(new_root.state)))
-    return sim.student.knowledge
+    return sim.get_knowledge()
 
 def test_student_exact_single_greedy(dgraph, stud, horizon, n_rollouts):
     '''
@@ -199,18 +199,12 @@ def test_student_exact():
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache, use_real):
+def test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, use_real):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
     :param dktcache: a dictionary to use for the dkt cache
     '''
     n_concepts = dgraph.n
-
-    # create the model and simulators
-    student = s.copy()
-    student.reset()
-    student.knowledge[0] = 1 # initialize the first concept to be known
-    sim = st.StudentExactSim(student, dgraph)
 
     # make the model
     model = dmc.RnnStudentSim(model)
@@ -239,44 +233,9 @@ def test_dkt_single(dgraph, s, horizon, n_rollouts, model, r_type, dktcache, use
         new_root.parent = None # cutoff the rest of the tree
         root = new_root
         #print('Next state: {}'.format(str(new_root.state)))
-    return sim.student.knowledge, best_q_value
+    return sim.get_knowledge(), best_q_value
 
-
-def test_dkt_single_greedy(dgraph, s, horizon, model):
-    '''
-    Performs a single trajectory with greedy 1-step lookahead and returns the final true student knowlegde.
-    '''
-    n_concepts = dgraph.n
-
-    # create the model and simulators
-    student = s.copy()
-    student.reset()
-    student.knowledge[0] = 1 # initialize the first concept to be known
-    sim = st.StudentExactSim(student, dgraph)
-
-    # make the model
-    model = dmc.RnnStudentSim(model)
-
-    greedy = DKTGreedyPolicy(model, sim)
-
-    for i in range(horizon):
-        best_action = greedy.best_greedy_action()
-
-        # debug check for whether action is optimal
-        if False:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action in opt_acts
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
-
-        # act in the real environment
-        greedy.advance(best_action)
-    return sim.student.knowledge
-
-def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None, use_real=True):
+def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None, use_real=True):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -284,7 +243,7 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_
     # load the model
     if chkpt is not None:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
-        model.model.load(chkpt)
+        model.load(chkpt)
     else:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
     # initialize the shared dktcache across MCTS trials
@@ -295,11 +254,13 @@ def test_dkt_chunk(n_trajectories, dgraph, student, model_id, chkpt, horizon, n_
     best_q = 0.0
     for i in xrange(n_trajectories):
         #print('traj i {}'.format(i))
+        # create the model and simulators
+        sim = s.copy()
         if not use_greedy:
-            k, best_q_value = test_dkt_single(dgraph, student, horizon, n_rollouts, model, r_type, dktcache, use_real)
+            k, best_q_value = test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, use_real)
         else:
-            k = test_dkt_single_greedy(dgraph, student, horizon, model)
-            best_q_value = 0
+            # This branch is DEPRECATED
+            assert(False)
         acc += np.mean(k)
         best_q += best_q_value
     return acc, best_q
@@ -327,6 +288,10 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
     student2 = st.Student2(n_concepts)
     test_student = student2
     
+    test_student.reset()
+    test_student.knowledge[0] = 1 # initialize the first concept to be known
+    sim = st.StudentExactSim(test_student.copy(), dgraph)
+    
     # create a shared dktcache across all processes
     dktcache_manager = mp.Manager()
     dktcache = dktcache_manager.dict()
@@ -335,13 +300,51 @@ def test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None)
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, test_student, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, sim, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
 
     test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Average posttest true: {}'.format(expected_reward(test_data)))
+    print('Average posttest mcts: {}'.format(avg_acc))
+    print('Average best q: {}'.format(avg_best_q))
+    return avg_acc, avg_best_q
+
+def test_dkt_rme(model_id, n_rollouts, n_trajectories, r_type, dmcmodel, chkpt):
+    '''
+    Test DKT+MCTS where the real environment is a StudentDKTSim with a proxy DynamicsModel
+    '''
+    import concept_dependency_graph as cdg
+    from simple_mdp import create_custom_dependency
+    
+    n_concepts = 4
+    horizon = 6
+    n_jobs = 8
+    traj_per_job =  n_trajectories // n_jobs
+
+    #dgraph = create_custom_dependency()
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
+    
+    # create a shared dktcache across all processes
+    dktcache_manager = mp.Manager()
+    # for the MCTS model
+    dktcache = dktcache_manager.dict()
+    # for the real environment 
+    dktsimcache = dktcache_manager.dict()
+    
+    # create the simulator
+    dktsim = st.StudentDKTSim(dgraph, dmcmodel, dktsimcache)
+
+    print('Testing proper RME model: {}'.format(model_id))
+    print('horizon: {}'.format(horizon))
+    print('rollouts: {}'.format(n_rollouts))
+
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, dktsim, model_id, chkpt, horizon, n_rollouts, False, r_type, dktcache=dktcache, use_real=True) for _ in range(n_jobs)))
+    results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
+    avg_acc, avg_best_q = results[0], results[1]
+
     print('Average posttest mcts: {}'.format(avg_acc))
     print('Average best q: {}'.format(avg_best_q))
     return avg_acc, avg_best_q
@@ -370,7 +373,7 @@ def test_dkt_qval(model_id, n_rollouts, r_type, chkpt=None):
     # load the model
     if chkpt is not None:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
-        model.model.load(chkpt)
+        model.load(chkpt)
     else:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
     # initialize the dktcache to speed up DKT queries
@@ -429,7 +432,7 @@ def test_dkt_extract_policy(model_id, n_rollouts, r_type, chkpt=None):
     # load the model
     if chkpt is not None:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
-        model.model.load(chkpt)
+        model.load(chkpt)
     else:
         model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
     # initialize the dktcache to speed up DKT queries
@@ -575,7 +578,7 @@ def dkt_test_policy(model_id, n_trajectories, r_type, chkpt):
     
     # load model from given file
     model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
-    model.model.load(chkpt)
+    model.load(chkpt)
 
     # create the model and simulators
     student = student2.copy()
@@ -626,7 +629,7 @@ def dkt_test_policies_rme(model_id, n_trajectories, r_type, policies, chkpt):
     
     # load model from given file
     model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
-    model.model.load(chkpt)
+    model.load(chkpt)
 
     # create the model and simulators
     student = student2.copy()
@@ -657,6 +660,24 @@ def dkt_test_policies_rme(model_id, n_trajectories, r_type, policies, chkpt):
     
     return rewards
 
+def dkt_test_mcts_proper_rme(model_id, n_rollouts, n_trajectories, r_type, envs, chkpt):
+    '''
+    Given a list of saved models as real environments, test the given saved model with MCTS.
+    '''
+    rewards = np.zeros((len(envs),))
+    for i in six.moves.range(len(envs)):
+        # create the proxy model and DKT sim
+        sim_manager = dmc.DMCManager()
+        sim_manager.start()
+        dmcmodel = sim_manager.DynamicsModel(model_id=model_id,timesteps=6, load_checkpoint=False)
+        #dmcmodel = dmc.DynamicsModel(model_id=model_id,timesteps=6, load_checkpoint=False)
+        dmcmodel.load(envs[i])
+        
+        acc, qval = test_dkt_rme(model_id, n_rollouts, n_trajectories, r_type, dmcmodel, chkpt)
+        rewards[i] = acc
+    
+    return rewards
+    
 
 def dkt_train_models(params):
     '''
@@ -702,7 +723,7 @@ def dkt_train_models(params):
             # save the checkpoint
             checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
             checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
-            dkt_model.model.save(checkpoint_path)
+            dkt_model.save(checkpoint_path)
             
             # update stats
             train_losses[r].extend([c.global_loss for c in ecall.tstates])
@@ -866,6 +887,33 @@ def dkt_test_models_rme(trainparams,mctsparams,policies):
     rmestats_path = '{}/{}'.format(trainparams.dir_name,rmestat_name)
     np.savez(rmestats_path, evals=rewards)
 
+def dkt_test_models_proper_rme(trainparams,mctsparams,envs):
+    '''
+    Given a set of runs, test a given set of models as the real environment corresponding to a robust matrix evaluation.
+    '''
+    
+    rewards = np.zeros((trainparams.num_runs, len(envs)))
+    
+    for r in six.moves.range(trainparams.num_runs):
+        for ep in trainparams.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+            
+            # load model from checkpoint
+            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            
+            curr_rewards = dkt_test_mcts_proper_rme(
+                trainparams.model_id, mctsparams.rme_n_rollouts, mctsparams.rme_n_trajectories, mctsparams.r_type, envs, checkpoint_path)
+            
+            # update stats
+            rewards[r,:] = curr_rewards
+    
+    # save stats
+    rmestat_name = mctsparams.rmeproper_pat.format(trainparams.run_name)
+    rmestats_path = '{}/{}'.format(trainparams.dir_name,rmestat_name)
+    np.savez(rmestats_path, evals=rewards)
 
 if __name__ == '__main__':
     starttime = time.time()
@@ -914,11 +962,11 @@ if __name__ == '__main__':
     # train and checkpoint the models
     
     # dropout 8 data
-    cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
+    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
     #cur_train = [TrainParams('runB', 30)]
     
     # dropout 10 data
-    #cur_train = [TrainParams('runA', 10)]
+    cur_train = [TrainParams('runA', 10)]
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     #dkt_train_models(TrainParams())
@@ -941,7 +989,8 @@ if __name__ == '__main__':
             self.policy_n_rollouts = 20000
             
             # for rme
-            self.rme_n_trajectories = 500
+            self.rme_n_rollouts = 3000
+            self.rme_n_trajectories = 100
             
             # below are generated values from above
             # stat filename pattern
@@ -961,12 +1010,16 @@ if __name__ == '__main__':
             # stat for robust matrix evaluation
             self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
                 self.r_type, self.rme_n_trajectories)
+            
+            # stat for robust matrix evaluation
+            self.rmeproper_pat = 'rmeproper-rtype{}-trajectories{}-{{}}'.format(
+                self.r_type, self.rme_n_trajectories)
     
     #----------------------------------------------------------------------
     # test the saved models
     
     # read the optpolicies from data
-    if True:
+    if False:
         data1 = np.load('experiments/test2_model_small-dropout10-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runA.npz')
         data2 = np.load('experiments/test2_model_small-dropout10-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runB.npz')
         opts = np.vstack([data1['opts'],data2['opts']])[:,0,:]
@@ -975,6 +1028,17 @@ if __name__ == '__main__':
         data62 = np.load('experiments/test2_model_small-dropout8-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runC.npz')
         data63 = np.load('experiments/test2_model_small-dropout8-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runD.npz')
         opts2 = np.vstack([data61['opts'],data62['opts'],data63['opts']])[:,0,:]
+    # the models to use as real environments for proper rme
+    if True:
+        envs = []
+        for ct in cur_train:
+            for r in six.moves.range(ct.num_runs):
+                for ep in ct.saved_epochs:
+                    # load model from checkpoint
+                    checkpoint_name = ct.checkpoint_pat.format(ct.run_name, r, ep)
+                    checkpoint_path = '{}/{}'.format(ct.dir_name,checkpoint_name)
+                    envs.append(checkpoint_path)
+        six.print_('\n'.join(envs))
 
     
     tp = TestParams()
@@ -983,9 +1047,10 @@ if __name__ == '__main__':
     #dkt_test_models_mcts_qval(TrainParams(),TestParams())
     for ct in cur_train:
         pass
-        dkt_test_models_rme(ct,tp,opts2)
+        #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
+        dkt_test_models_proper_rme(ct,tp,envs)
     #----------------------------------------------------------------------
     
     ############################################################################
