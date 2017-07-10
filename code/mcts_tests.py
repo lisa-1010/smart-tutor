@@ -938,12 +938,12 @@ if __name__ == '__main__':
         '''
         def __init__(self, rname, nruns):
             self.model_id = 'test2_model_small'
-            self.dropout = 0.8
+            self.dropout = 1.0
             self.shuffle = False
             self.seqlen = 5
             self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [23]
+            self.saved_epochs = [13]
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -963,11 +963,11 @@ if __name__ == '__main__':
     
     # dropout 8 data
     #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
-    cur_train = [TrainParams('runA', 20), TrainParams('runC', 5)]
+    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 5)]
     #cur_train = [TrainParams('runB', 30)]
     
     # dropout 10 data
-    #cur_train = [TrainParams('runA', 10), TrainParams('runB', 15)]
+    cur_train = [TrainParams('runA', 10), TrainParams('runB', 30)]
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     #dkt_train_models(TrainParams())
