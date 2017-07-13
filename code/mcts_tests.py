@@ -963,7 +963,7 @@ if __name__ == '__main__':
     
     # dropout 8 data
     #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
-    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 5)]
+    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 20)]
     #cur_train = [TrainParams('runB', 30)]
     
     # dropout 10 data
@@ -990,7 +990,7 @@ if __name__ == '__main__':
             self.policy_n_rollouts = 20000
             
             # for rme
-            self.rme_n_rollouts = 1000
+            self.rme_n_rollouts = 2000
             self.rme_n_trajectories = 100
             
             # below are generated values from above
