@@ -18,6 +18,7 @@ import pickle
 import multiprocessing as mp
 import six
 import os
+import random
 
 import constants
 import data_generator as dg
@@ -563,12 +564,10 @@ def test_dkt_early_stopping():
     
     np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores, qs=best_qs)
 
-def dkt_test_policy(model_id, n_trajectories, r_type, chkpt):
+def dkt_test_policy(model_id, horizon, n_trajectories, r_type, chkpt):
     '''
-    Tests the optimal open loop policy for student2 n4 on the learned model.
+    Tests the uniformly random policy (behavior) for student2 n4 on the learned model.
     '''
-    
-    horizon = 6
     n_concepts = 4
     
     dgraph = cdg.ConceptDependencyGraph()
@@ -586,33 +585,26 @@ def dkt_test_policy(model_id, n_trajectories, r_type, chkpt):
     student.knowledge[0] = 1 # initialize the first concept to be known
     sim = st.StudentExactSim(student, dgraph)
     
-    # multiple optimal policies
-    opt_policies = [
-        [1,1,2,2,3,3],
-        [1,2,1,2,3,3],
-        [2,1,2,1,3,3],
-        [2,2,1,1,3,3],
-    ]
-    
     # initialize the shared dktcache across the trials
     dktcache = dict()
     
     reward_acc = 0.0
-    num_policies = len(opt_policies)
-    traj_per_policy = n_trajectories // num_policies
     
-    for pol in opt_policies:
-        for t in six.moves.range(traj_per_policy):
-            # make the model
-            rnnmodel = dmc.RnnStudentSim(model)
+    for t in six.moves.range(n_trajectories):
+        # make the model
+        rnnmodel = dmc.RnnStudentSim(model)
 
-            curr_state = DKTState(rnnmodel, sim, 1, horizon, r_type, dktcache, False)
-            all_actions = curr_state.actions
-            for i in range(horizon):
-                curr_state = curr_state.perform(all_actions[pol[i]])
+        curr_state = DKTState(rnnmodel, sim, 1, horizon, r_type, dktcache, False)
+        all_actions = curr_state.actions
+        for i in range(horizon):
+            curr_state = curr_state.perform(random.choice(all_actions))
             reward_acc += curr_state.reward()
-    
-    return reward_acc / (num_policies * traj_per_policy)
+        #six.print_('Step: {}'.format(curr_state.step))
+        #six.print_('Reward: {}'.format(curr_state.reward()))
+        #six.print_('Reward Acc: {}'.format(reward_acc))
+        #six.print_('Probs: {}'.format(curr_state.get_probs()))
+
+    return reward_acc / n_trajectories
 
 def dkt_test_policies_rme(model_id, n_trajectories, r_type, policies, chkpt):
     '''
@@ -832,7 +824,7 @@ def dkt_test_models_extract_policy(trainparams,mctsparams):
 
 def dkt_test_models_policy(trainparams,mctsparams):
     '''
-    Given a set of runs, test the optimal policy using the checkpointed models 
+    Given a set of runs, test the uniform random policy (behavior policy) using the checkpointed models 
     '''
     
     rewards = [[] for _ in six.moves.range(trainparams.num_runs)]
@@ -848,7 +840,8 @@ def dkt_test_models_policy(trainparams,mctsparams):
             checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
             
             # test dkt
-            reward_avg = dkt_test_policy(trainparams.model_id, mctsparams.n_trajectories, mctsparams.r_type, checkpoint_path)
+            reward_avg = dkt_test_policy(trainparams.model_id, trainparams.seqlen, mctsparams.n_trajectories, mctsparams.r_type, checkpoint_path)
+            #six.print_('Reward avg: {}'.format(reward_avg))
             
             # update stats
             rewards[r].append(reward_avg)
@@ -938,12 +931,12 @@ if __name__ == '__main__':
         '''
         def __init__(self, rname, nruns):
             self.model_id = 'test2_model_small'
-            self.dropout = 1.0
+            self.dropout = 0.8
             self.shuffle = False
             self.seqlen = 5
             self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [13]
+            self.saved_epochs = [23]
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -963,11 +956,11 @@ if __name__ == '__main__':
     
     # dropout 8 data
     #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
-    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 20)]
+    cur_train = [TrainParams('runA', 20)]
     #cur_train = [TrainParams('runB', 30)]
     
     # dropout 10 data
-    cur_train = [TrainParams('runA', 10), TrainParams('runB', 30)]
+    #cur_train = [TrainParams('runA', 10)]
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     #dkt_train_models(TrainParams())
@@ -990,7 +983,7 @@ if __name__ == '__main__':
             self.policy_n_rollouts = 20000
             
             # for rme
-            self.rme_n_rollouts = 2000
+            self.rme_n_rollouts = 1000
             self.rme_n_trajectories = 100
             
             # below are generated values from above
@@ -1030,7 +1023,7 @@ if __name__ == '__main__':
         data63 = np.load('experiments/test2_model_small-dropout8-shuffle0-data-test2-n100000-l5-random.pickle/optpolicy-rtype1-rollouts10000-runD.npz')
         opts2 = np.vstack([data61['opts'],data62['opts'],data63['opts']])[:,0,:]
     # the models to use as real environments for proper rme
-    if True:
+    if False:
         envs = []
         for ct in cur_train:
             for r in six.moves.range(ct.num_runs):
@@ -1051,7 +1044,8 @@ if __name__ == '__main__':
         #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
-        dkt_test_models_proper_rme(ct,tp,envs)
+        #dkt_test_models_proper_rme(ct,tp,envs)
+        dkt_test_models_policy(ct,tp)
     #----------------------------------------------------------------------
     
     ############################################################################
