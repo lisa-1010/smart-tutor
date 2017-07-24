@@ -954,12 +954,12 @@ if __name__ == '__main__':
     #----------------------------------------------------------------------
     # train and checkpoint the models
     
-    # dropout 8 data
-    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
-    cur_train = [TrainParams('runA', 20)]
+    # dropout 8 data - don't forget to change the dropout and saved_epochs
+    cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
+    #cur_train = [TrainParams('runA', 20)]
     #cur_train = [TrainParams('runB', 30)]
     
-    # dropout 10 data
+    # dropout 10 data - don't forget to change the dropout and saved_epochs
     #cur_train = [TrainParams('runA', 10)]
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
@@ -971,7 +971,7 @@ if __name__ == '__main__':
         Parameters for testing models with MCTS/policies
         '''
         def __init__(self, use_real=True):
-            self.r_type = SEMISPARSE
+            self.r_type = SPARSE
             self.n_rollouts = 3000
             self.n_trajectories = 400
             self.use_real = use_real

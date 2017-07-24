@@ -141,6 +141,16 @@ def expected_reward(data):
         avg += np.mean(data[i][-1][2])
     return avg / len(data)
 
+def expected_sparse_reward(data):
+    '''
+    :param data: output from generate_data
+    :return: the sample mean of the sparse reward
+    '''
+    avg = 0.0
+    for i in xrange(len(data)):
+        avg += np.prod(data[i][-1][2])
+    return avg / len(data)
+
 def percent_complete(data):
     '''
     :param data: output from generate_data
