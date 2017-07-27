@@ -927,7 +927,7 @@ if __name__ == '__main__':
     
     class TrainParams(object):
         '''
-        Parameters for training models
+        Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
         '''
         def __init__(self, rname, nruns):
             self.model_id = 'test2_model_small'
@@ -950,25 +950,55 @@ if __name__ == '__main__':
             self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
             # stat file
             self.stat_name = 'stats-{}'.format(self.run_name)
+    
+    class TrainParams2(object):
+        '''
+        Parameters for training models. These correspond to student2 with 2 skills, and the optimal policy is 2 steps.
+        '''
+        def __init__(self, rname, nruns):
+            self.model_id = 'test2_model2_tiny'
+            self.dropout = 1.0
+            self.shuffle = False
+            self.seqlen = 2
+            self.datafile = 'test2-n10000-l{}-random.pickle'.format(self.seqlen)
+            # which epochs (zero-based) to save, the last saved epoch is the total epoch
+            self.saved_epochs = [60]
+            # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
+            self.run_name = rname
+            # how many runs
+            self.num_runs = nruns
+
+            # these names are derived from above and should not be touched generally
+            # folder to put the checkpoints into
+            self.dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(
+                self.model_id,int(self.dropout*10),int(self.shuffle),self.datafile)
+            # pattern for the checkpoints
+            self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+            # stat file
+            self.stat_name = 'stats-{}'.format(self.run_name)
         
     #----------------------------------------------------------------------
     # train and checkpoint the models
     
-    # dropout 8 data - don't forget to change the dropout and saved_epochs
-    cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
+    # student2 4 skills dropout 8 data - don't forget to change the dropout and saved_epochs
+    #cur_train = [TrainParams('runA', 20), TrainParams('runC', 30), TrainParams('runD', 50)]
     #cur_train = [TrainParams('runA', 20)]
     #cur_train = [TrainParams('runB', 30)]
     
-    # dropout 10 data - don't forget to change the dropout and saved_epochs
+    # student2 4 skills dropout 10 data - don't forget to change the dropout and saved_epochs
     #cur_train = [TrainParams('runA', 10)]
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
-    #dkt_train_models(TrainParams())
+    # student2 with 2 skills training
+    cur_train = [TrainParams2('runA',20)]
+    
+    for ct in cur_train:
+        dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
         '''
-        Parameters for testing models with MCTS/policies
+        Parameters for testing models with MCTS/policies. For testing student2 with 4 skills.
         '''
         def __init__(self, use_real=True):
             self.r_type = SPARSE
@@ -1045,7 +1075,7 @@ if __name__ == '__main__':
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
-        dkt_test_models_policy(ct,tp)
+        #dkt_test_models_policy(ct,tp)
     #----------------------------------------------------------------------
     
     ############################################################################

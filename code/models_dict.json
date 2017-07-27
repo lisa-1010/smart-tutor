@@ -54,6 +54,12 @@
         "n_inputdim": 8,
         "n_outputdim": 4
     },
+    "test2_model2_tiny": {
+        "architecture": "default",
+        "n_hidden": 3,
+        "n_inputdim": 4,
+        "n_outputdim": 2
+    },
     "test2_model_drqn_mid": {
         "architecture": "default",
         "n_hidden": 10,

@@ -99,6 +99,7 @@ class DynamicsModel(object):
     
     def _build_regression_lstm_net2(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=0.5):
+        # don't have 2 lstms, just have a shared output layer
         # this alternative doesn't seem to work as well
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
@@ -129,8 +130,8 @@ class DynamicsModel(object):
         :return:
         """
         with self._tfgraph.as_default():
+            #tf.reset_default_graph()
             input_data, output_mask, output_data = train_data
-            tf.reset_default_graph()
             date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
             run_id = "{}".format(date_time_string)
             self._model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=0.1, run_id=run_id, callbacks=callbacks, shuffle=shuffle)
