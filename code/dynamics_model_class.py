@@ -52,11 +52,20 @@ class DynamicsModel(object):
             #tf.reset_default_graph()
             self.timesteps = timesteps
             self.model_dict = models_dict_utils.load_model_dict(model_id)
-            self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
+            if self.model_dict["architecture"] == 'default':
+                self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net(n_timesteps=timesteps,
                                                                                      n_inputdim=self.model_dict["n_inputdim"],
                                                                                      n_hidden=self.model_dict["n_hidden"],
                                                                                      n_outputdim=self.model_dict["n_outputdim"],
                                                                                      dropout=dropout)
+            elif self.model_dict["architecture"] == 'simple':
+                self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net2(n_timesteps=timesteps,
+                                                                                     n_inputdim=self.model_dict["n_inputdim"],
+                                                                                     n_hidden=self.model_dict["n_hidden"],
+                                                                                     n_outputdim=self.model_dict["n_outputdim"],
+                                                                                     dropout=dropout)
+            else:
+                assert(False)
             # the number of units in the memory c of lstm
             self.hidden_c_size = self.hidden_1[0].shape[1]
             # the number of units in the hidden units of lstm
