@@ -60,6 +60,12 @@
         "n_inputdim": 4,
         "n_outputdim": 2
     },
+    "test2_model2gru_tiny": {
+        "architecture": "gru",
+        "n_hidden": 3,
+        "n_inputdim": 4,
+        "n_outputdim": 2
+    },
     "test2_model2simple_tiny": {
         "architecture": "simple",
         "n_hidden": 3,

@@ -262,21 +262,22 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollou
         else:
             # This branch is DEPRECATED
             assert(False)
-        acc += np.mean(k)
+        final_reward = np.sum(k)
+        if r_type == SPARSE:
+            final_reward = np.prod(k)
+        acc += final_reward
         best_q += best_q_value
     return acc, best_q
 
-def test_dkt(model_id, n_rollouts, n_trajectories, r_type, use_real, chkpt=None):
+def test_dkt(model_id, n_concepts, horizon, n_rollouts, n_trajectories, r_type, use_real, chkpt=None):
     '''
     Test DKT+MCTS
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     
-    n_concepts = 4
     use_greedy = False
     #learn_prob = 0.5
-    horizon = 6
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
 
@@ -749,7 +750,7 @@ def dkt_test_models_mcts(trainparams,mctsparams):
             
             # test dkt
             score, qval = test_dkt(
-                trainparams.model_id, mctsparams.n_rollouts, mctsparams.n_trajectories,
+                trainparams.model_id, trainparams.n_concepts, mctsparams.horizon, mctsparams.n_rollouts, mctsparams.n_trajectories,
                 mctsparams.r_type, mctsparams.use_real, chkpt=checkpoint_path)
             
             # update stats
@@ -931,6 +932,7 @@ if __name__ == '__main__':
         '''
         def __init__(self, rname, nruns):
             self.model_id = 'test2_model_small'
+            self.n_concepts = 4
             self.dropout = 0.8
             self.shuffle = False
             self.seqlen = 5
@@ -956,13 +958,16 @@ if __name__ == '__main__':
         Parameters for training models. These correspond to student2 with 2 skills, and the optimal policy is 2 steps.
         '''
         def __init__(self, rname, nruns):
-            self.model_id = 'test2_model2_tiny'
+            #self.model_id = 'test2_model2simple_tiny'
+            #self.model_id = 'test2_model2_tiny'
+            self.model_id = 'test2_model2gru_tiny'
+            self.n_concepts = 2
             self.dropout = 1.0
             self.shuffle = False
             self.seqlen = 2
             self.datafile = 'test2-n10000-l{}-random.pickle'.format(self.seqlen)
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [60]
+            self.saved_epochs = [20] # 54, 46 simple, 43 gru
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -990,9 +995,11 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     # student2 with 2 skills training
-    cur_train = [TrainParams2('runA',20)]
+    #cur_train = [TrainParams2('runA',50)]
+    cur_train = [TrainParams2('runB',50)] # runB uses fewer training epochs
     
     for ct in cur_train:
+        pass
         dkt_train_models(ct)
     #----------------------------------------------------------------------
     
@@ -1005,6 +1012,51 @@ if __name__ == '__main__':
             self.n_rollouts = 3000
             self.n_trajectories = 400
             self.use_real = use_real
+            self.horizon = 6
+            
+            # for testing initialq values
+            self.initialq_n_rollouts = 100000
+            
+            # for extracting a policy
+            self.policy_n_rollouts = 20000
+            
+            # for rme
+            self.rme_n_rollouts = 1000
+            self.rme_n_trajectories = 100
+            
+            # below are generated values from above
+            # stat filename pattern
+            self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
+                self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
+            # stat filename for policy testing
+            self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
+                self.r_type, self.n_trajectories)
+            # state filename for initial qval teseting
+            self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
+                self.r_type, self.initialq_n_rollouts)
+            
+            # stat for extracting a policy
+            self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
+                self.r_type, self.policy_n_rollouts)
+            
+            # stat for robust matrix evaluation
+            self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
+                self.r_type, self.rme_n_trajectories)
+            
+            # stat for robust matrix evaluation
+            self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
+                self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
+    
+    class TestParams2:
+        '''
+        Parameters for testing models with MCTS/policies. For testing student2 with 2 skills.
+        '''
+        def __init__(self, use_real=True):
+            self.r_type = SPARSE
+            self.n_rollouts = 1000
+            self.n_trajectories = 100
+            self.use_real = use_real
+            self.horizon = 2
             
             # for testing initialq values
             self.initialq_n_rollouts = 100000
@@ -1065,12 +1117,11 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams()
-    #dkt_test_models_mcts(TrainParams(),TestParams(use_real=True))
-    #dkt_test_models_policy(TrainParams(),TestParams())
-    #dkt_test_models_mcts_qval(TrainParams(),TestParams())
+    tp = TestParams2()
     for ct in cur_train:
         pass
+        #dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts_qval(TrainParams(),TestParams())
         #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
