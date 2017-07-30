@@ -959,15 +959,17 @@ if __name__ == '__main__':
         '''
         def __init__(self, rname, nruns):
             #self.model_id = 'test2_model2simple_tiny'
-            #self.model_id = 'test2_model2_tiny'
-            self.model_id = 'test2_model2gru_tiny'
+            self.model_id = 'test2_model2_tiny'
+            #self.model_id = 'test2_model2gru_tiny'
             self.n_concepts = 2
             self.dropout = 1.0
             self.shuffle = False
             self.seqlen = 2
             self.datafile = 'test2-n10000-l{}-random.pickle'.format(self.seqlen)
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [20] # 54, 46 simple, 43 gru
+            # 54, 46 simple, 43 gru, 20 for earlier for simple and gru, 30 for earlier for lstm
+            # with binary crossentropy, 40, 40 simple, 40 gru (maybe 30 if you feel like it)
+            self.saved_epochs = [40] 
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -996,7 +998,7 @@ if __name__ == '__main__':
     
     # student2 with 2 skills training
     #cur_train = [TrainParams2('runA',50)]
-    cur_train = [TrainParams2('runB',50)] # runB uses fewer training epochs
+    cur_train = [TrainParams2('runBinCE-A',50)] # runB uses fewer training epochs
     
     for ct in cur_train:
         pass

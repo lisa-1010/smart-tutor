@@ -64,12 +64,14 @@ class DynamicsModel(object):
                                                                                      n_hidden=self.model_dict["n_hidden"],
                                                                                      n_outputdim=self.model_dict["n_outputdim"],
                                                                                      dropout=dropout)
+            elif self.model_dict["architecture"] == 'gru':
+                self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net_gru(n_timesteps=timesteps,
+                                                                                     n_inputdim=self.model_dict["n_inputdim"],
+                                                                                     n_hidden=self.model_dict["n_hidden"],
+                                                                                     n_outputdim=self.model_dict["n_outputdim"],
+                                                                                     dropout=dropout)
             else:
                 assert(False)
-            # the number of units in the memory c of lstm
-            self.hidden_c_size = self.hidden_1[0].shape[1]
-            # the number of units in the hidden units of lstm
-            self.hidden_h_size = self.hidden_1[0].shape[1]
 
             tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
             checkpoint_dir = '../checkpoints/' + model_id + '/'
@@ -103,7 +105,7 @@ class DynamicsModel(object):
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
-                                 loss='mean_square')
+                                 loss='mean_square') # mean square works; binary crossentropy seems to work maybe
         return net, hidden_states_1, hidden_states_2
     
     def _build_regression_lstm_net2(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
@@ -117,9 +119,21 @@ class DynamicsModel(object):
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
-                                 loss='mean_square')
+                                 loss='mean_square') # mean square works; binary crossentropy seems to work maybe
         return net, hidden_states_1, None
 
+    def _build_regression_lstm_net_gru(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
+                                           n_outputdim=n_outputdim, dropout=0.5):
+        net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
+        output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
+        net, hidden_states_1 = tflearn.gru(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="gru_1")
+        net, hidden_states_2 = tflearn.gru(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="gru_2")
+        net = tf.stack(net, axis=1)
+        net = net * output_mask
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
+                                 loss='mean_square') # mean square works; binary crossentropy seems to work maybe
+        return net, hidden_states_1, hidden_states_2
+    
     def load(self, s):
         with self._tfgraph.as_default():
             #tf.reset_default_graph()
