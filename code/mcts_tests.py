@@ -957,19 +957,22 @@ if __name__ == '__main__':
         '''
         Parameters for training models. These correspond to student2 with 2 skills, and the optimal policy is 2 steps.
         '''
-        def __init__(self, rname, nruns):
+        def __init__(self, rname, nruns, model_id, saved_epochs):
             #self.model_id = 'test2_model2simple_tiny'
-            self.model_id = 'test2_model2_tiny'
+            #self.model_id = 'test2_model2_tiny'
             #self.model_id = 'test2_model2gru_tiny'
+            self.model_id = model_id
             self.n_concepts = 2
             self.dropout = 1.0
             self.shuffle = False
-            self.seqlen = 2
+            self.seqlen = 3 # have tried length 2 and length 3
             self.datafile = 'test2-n10000-l{}-random.pickle'.format(self.seqlen)
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
+            # for length 2
             # 54, 46 simple, 43 gru, 20 for earlier for simple and gru, 30 for earlier for lstm
             # with binary crossentropy, 40, 40 simple, 40 gru (maybe 30 if you feel like it)
-            self.saved_epochs = [40] 
+            # for length 3
+            self.saved_epochs = saved_epochs
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -997,12 +1000,19 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runA', 10), TrainParams('runB', 90)]
     
     # student2 with 2 skills training
-    #cur_train = [TrainParams2('runA',50)]
-    cur_train = [TrainParams2('runBinCE-A',50)] # runB uses fewer training epochs
+    
+    # train binary crossentropy OLD
+    #cur_train = [TrainParams2('runBinCE-A',50)]
+    
+    # trying to determine when to stop training
+    #cur_train = [TrainParams2('runA',20,'test2_model2_tiny'), TrainParams2('runA',20,'test2_model2simple_tiny'), TrainParams2('runA',20,'test2_model2gru_tiny')]
+    
+    # train 50 of each architecture
+    cur_train = [TrainParams2('runB',50,'test2_model2_tiny', [40]), TrainParams2('runB',50,'test2_model2simple_tiny',[25]), TrainParams2('runB',50,'test2_model2gru_tiny',[25])]
     
     for ct in cur_train:
         pass
-        dkt_train_models(ct)
+        #dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1122,7 +1132,7 @@ if __name__ == '__main__':
     tp = TestParams2()
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(TrainParams(),TestParams())
         #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)
