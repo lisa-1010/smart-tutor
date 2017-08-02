@@ -42,6 +42,18 @@
         "n_inputdim": 8,
         "n_outputdim": 4
     },
+    "test2_modelsimple_small": {
+        "architecture": "simple",
+        "n_hidden": 5,
+        "n_inputdim": 8,
+        "n_outputdim": 4
+    },
+    "test2_modelgru_small": {
+        "architecture": "gru",
+        "n_hidden": 5,
+        "n_inputdim": 8,
+        "n_outputdim": 4
+    },
     "test2_model_mid": {
         "architecture": "default",
         "n_hidden": 10,

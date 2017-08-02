@@ -930,15 +930,16 @@ if __name__ == '__main__':
         '''
         Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
         '''
-        def __init__(self, rname, nruns):
-            self.model_id = 'test2_model_small'
+        def __init__(self, rname, nruns, model_id, saved_epochs):
+            #self.model_id = 'test2_model_small'
+            self.model_id = model_id
             self.n_concepts = 4
-            self.dropout = 0.8
+            self.dropout = 1.0
             self.shuffle = False
-            self.seqlen = 5
+            self.seqlen = 7
             self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = [23]
+            self.saved_epochs = saved_epochs
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
             self.run_name = rname
             # how many runs
@@ -1008,7 +1009,14 @@ if __name__ == '__main__':
     #cur_train = [TrainParams2('runA',20,'test2_model2_tiny'), TrainParams2('runA',20,'test2_model2simple_tiny'), TrainParams2('runA',20,'test2_model2gru_tiny')]
     
     # train 50 of each architecture
-    cur_train = [TrainParams2('runB',50,'test2_model2_tiny', [40]), TrainParams2('runB',50,'test2_model2simple_tiny',[25]), TrainParams2('runB',50,'test2_model2gru_tiny',[25])]
+    #cur_train = [TrainParams2('runB',50,'test2_model2_tiny', [40]), TrainParams2('runB',50,'test2_model2simple_tiny',[25]), TrainParams2('runB',50,'test2_model2gru_tiny',[25])]
+    
+    # student2 4 skills with training trajectory length 7
+    # first find try to find when to stop
+    #cur_train = [TrainParams('runA',10,'test2_model_small', [20]), TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgru_small',[20])]
+    
+    # found epoch 12 is good to stop, so now learn 50 models each
+    cur_train = [TrainParams('runB',50,'test2_model_small', [12]), TrainParams('runB',50,'test2_modelsimple_small',[12]),TrainParams('runB',50,'test2_modelgru_small',[12])]
     
     for ct in cur_train:
         pass
@@ -1022,7 +1030,7 @@ if __name__ == '__main__':
         def __init__(self, use_real=True):
             self.r_type = SPARSE
             self.n_rollouts = 3000
-            self.n_trajectories = 400
+            self.n_trajectories = 100
             self.use_real = use_real
             self.horizon = 6
             
@@ -1129,7 +1137,7 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams2()
+    tp = TestParams()
     for ct in cur_train:
         pass
         dkt_test_models_mcts(ct,tp)
