@@ -1023,7 +1023,11 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runA',10,'test2_model_small', [20]), TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgru_small',[20])]
     
     # found stopping epochs, so now learn 50 models each
-    cur_train = [TrainParams('runB',50,'test2_model_small', [9]), TrainParams('runB',50,'test2_modelsimple_small',[8]),TrainParams('runB',50,'test2_modelgru_small',[6])]
+    #cur_train = [TrainParams('runB',50,'test2_model_small', [9]), TrainParams('runB',50,'test2_modelsimple_small',[8]),TrainParams('runB',50,'test2_modelgru_small',[6])]
+    
+    # student2 4 skills with training trajectory length 7, random behavior policy, mid-size model
+    # trying to determine when to stop
+    cur_train = [TrainParams('runA',10,'test2_model_mid', [20]), TrainParams('runA',10,'test2_modelsimple_mid',[20]), TrainParams('runA',10,'test2_modelgru_mid',[20])]
     
     for ct in cur_train:
         pass
