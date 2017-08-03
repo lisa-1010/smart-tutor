@@ -54,28 +54,6 @@ def fulfilled_prereqs(concept_tree, knowledge, concepts):
                 return False
     return True
 
-
-def _choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=False):
-    """
-    DEPRECATED - use sample_expert_action
-    Choose an exercise that the student has all the prerequisites for
-    :param knowledge:
-    :return: concepts:
-    """
-    concepts = np.zeros((concept_tree.n,))
-    for i in xrange(concept_tree.n):
-        if not knowledge[i]:
-            # if student hasn't learned concept yet:
-            concepts[i] = 1
-            if fulfilled_prereqs(concept_tree, knowledge, concepts):
-                # if verbose:
-                #     print "chose exercise with concept {}".format(i)
-                return concepts
-            else:
-                concepts[i] = 0
-    concepts[0] = 1
-    return concepts
-
 def sample_expert_action(concept_tree, knowledge):
     '''
     Samples an optimal action given the current knowledge and the concept tree.
@@ -166,7 +144,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
     for i in xrange(seqlen):
         # print (s.knowledge)
         if policy == 'expert':
-            concepts = choose_next_concept_with_expert_policy(concept_tree, s.knowledge, verbose=verbose)
+            concepts = sample_expert_action(concept_tree, s.knowledge)
             ex = exer.Exercise(concepts=concepts)
         elif policy == 'egreedy':
             concepts = egreedy_expert(concept_tree, s.knowledge, epsilon)
