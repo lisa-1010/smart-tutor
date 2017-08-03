@@ -937,7 +937,7 @@ if __name__ == '__main__':
             self.dropout = 1.0
             self.shuffle = False
             self.seqlen = 7
-            self.datafile = 'test2-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
+            self.datafile = 'test2-n100000-l{}-egreedy0.30.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
             self.saved_epochs = saved_epochs
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
@@ -1016,11 +1016,18 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runA',10,'test2_model_small', [20]), TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgru_small',[20])]
     
     # found epoch 12 is good to stop, so now learn 50 models each
-    cur_train = [TrainParams('runB',50,'test2_model_small', [12]), TrainParams('runB',50,'test2_modelsimple_small',[12]),TrainParams('runB',50,'test2_modelgru_small',[12])]
+    #cur_train = [TrainParams('runB',50,'test2_model_small', [12]), TrainParams('runB',50,'test2_modelsimple_small',[12]),TrainParams('runB',50,'test2_modelgru_small',[12])]
+    
+    # student2 4 skills with training trajectory length egreedy 0.30
+    # first try to find when to stop
+    #cur_train = [TrainParams('runA',10,'test2_model_small', [20]), TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgru_small',[20])]
+    
+    # found stopping epochs, so now learn 50 models each
+    cur_train = [TrainParams('runB',50,'test2_model_small', [9]), TrainParams('runB',50,'test2_modelsimple_small',[8]),TrainParams('runB',50,'test2_modelgru_small',[6])]
     
     for ct in cur_train:
         pass
-        #dkt_train_models(ct)
+        dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1140,7 +1147,7 @@ if __name__ == '__main__':
     tp = TestParams()
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(TrainParams(),TestParams())
         #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)

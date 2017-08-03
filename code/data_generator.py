@@ -27,6 +27,7 @@ import random
 import pickle
 import time
 import copy
+import six
 from collections import defaultdict, deque, Counter
 
 # Custom Modules
@@ -54,8 +55,9 @@ def fulfilled_prereqs(concept_tree, knowledge, concepts):
     return True
 
 
-def choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=False):
+def _choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=False):
     """
+    DEPRECATED - use sample_expert_action
     Choose an exercise that the student has all the prerequisites for
     :param knowledge:
     :return: concepts:
@@ -74,8 +76,45 @@ def choose_next_concept_with_expert_policy(concept_tree, knowledge, verbose=Fals
     concepts[0] = 1
     return concepts
 
+def sample_expert_action(concept_tree, knowledge):
+    '''
+    Samples an optimal action given the current knowledge and the concept tree.
+    Samples uniformly from all optimal actions.
+    '''
+    next_concepts = []
+    
+    # find all possible concepts that have not been learned yet but whose prereq are fulfilled
+    for i in six.moves.range(concept_tree.n):
+        if not knowledge[i]:
+            cur_concept = np.zeros((concept_tree.n,),dtype=np.int)
+            cur_concept[i] = 1
+            if fulfilled_prereqs(concept_tree, knowledge, cur_concept):
+                next_concepts.append(i)
+    
+    if not next_concepts:
+        # nothing new can be learned, then just be random
+        next_action = np.random.randint(0,concept_tree.n)
+    else:
+        # uniformly pick an optimal action
+        next_action = np.random.choice(next_concepts)
+    next_c = np.zeros((concept_tree.n,),dtype=np.int)
+    next_c[next_action] = 1
+    return next_c
 
-def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq=None, initial_knowledge=None, policy=None, verbose=False):
+def egreedy_expert(concept_tree, knowledge, epsilon):
+    '''
+    egreedy over the expert policy
+    '''
+    if np.random.random() < epsilon:
+        # random action
+        next_action = np.random.randint(0,concept_tree.n)
+        next_c = np.zeros((concept_tree.n,),dtype=np.int)
+        next_c[next_action] = 1
+    else:
+        next_c = sample_expert_action(concept_tree, knowledge)
+    return next_c
+
+def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq=None, initial_knowledge=None, policy=None, epsilon=None, verbose=False):
     '''
     :param n: number of concepts; if None use N_CONCEPTS
     :param concept_tree: Concept dependency graph
@@ -85,6 +124,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         if exercise_seq provided, policy arg will be disregarded.
     :param initial_knowledge: initial knowledge of student. If None, will be set to 0 for all concepts.
     :param policy: if no exercise_seq provided, use the specified policy to generate exercise sequence.
+    :param epsilon: epsilon for egreedy policy
     :param verbose: if True, print out debugging / progress statements
     :return: array of tuples, where each tuple consists of
     (exercise, 0 or 1 indicating success of student on that exercise, knowledge of student after doing exercise)
@@ -117,28 +157,6 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
                 concepts[np.random.randint(n_concepts)] = 1
             ex = exer.Exercise(concepts=concepts)
             exercise_seq.append(ex)
-    if not exercise_seq and policy == 'student2':
-        '''
-        Custom behavior policy for student2 domain.
-        Just randomly shuffle almost optimal trajectory
-        '''
-        assert(seqlen == n_concepts * 2 - 1)
-        in_order = list(range(n_concepts))
-        seq1 = in_order + in_order
-        del seq1[-1]
-        seq2 = in_order + in_order
-        del seq2[-2]
-        if np.random.random() < 0.5:
-            seq = seq1
-        else:
-            seq = seq2
-        exercise_seq = []
-        for i in xrange(seqlen):
-            concepts = np.zeros((n_concepts,))
-            concepts[seq[i]] = 1
-            ex = exer.Exercise(concepts=concepts)
-            exercise_seq.append(ex)
-        np.random.shuffle(exercise_seq)
 
     # Go through sequence of exercises and record whether student solved each or not
     student_performance = []
@@ -149,6 +167,9 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         # print (s.knowledge)
         if policy == 'expert':
             concepts = choose_next_concept_with_expert_policy(concept_tree, s.knowledge, verbose=verbose)
+            ex = exer.Exercise(concepts=concepts)
+        elif policy == 'egreedy':
+            concepts = egreedy_expert(concept_tree, s.knowledge, epsilon)
             ex = exer.Exercise(concepts=concepts)
         else:
             ex = exercise_seq[i]
@@ -169,13 +190,16 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
     return student_sample
 
 
-def generate_data(concept_tree, student=None, filter_mastery=False, n_students=100, seqlen=100, policy='modulo', filename=None, verbose=False):
+def generate_data(concept_tree, student=None, filter_mastery=False, n_students=100, seqlen=100, policy='modulo', epsilon=0.0, filename=None, verbose=False):
     """
+    This is the main data generation function.
+    
     :param concept_tree: Concept dependency graph
     :param student: Student environment
     :param filter_mastery: boolean indicating whether want to remove trajectories that end in full mastery
     :param seqlen: max length of exercises for a student. if student learns all concepts, sequence can be shorter.
-    :param policy: which policy to use to generate data. can be 'expert', 'modulo', 'random'
+    :param policy: which policy to use to generate data. can be 'expert', 'modulo', 'random', 'egreedy'
+    :param epsilon: epsilon for egreedy policy only; not used by other policies
     :param filename: where to store the generated data. If None, will not save to file.
     :param verbose: if True, prints debugging statements
     :return:
@@ -187,7 +211,7 @@ def generate_data(concept_tree, student=None, filter_mastery=False, n_students=1
         if verbose:
             print ("Creating sample for {}th student".format(i))
         student_sample = generate_student_sample(concept_tree, student=student, seqlen=seqlen, exercise_seq=None, initial_knowledge=None,
-                                                 policy=policy, verbose=verbose)
+                                                 policy=policy, epsilon=epsilon, verbose=verbose)
         if filter_mastery:
             final_knowledge = student_sample[-1][2]
             if np.mean(final_knowledge) < 0.999:
