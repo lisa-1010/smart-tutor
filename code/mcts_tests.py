@@ -186,7 +186,7 @@ def test_student_exact():
     dgraph.init_default_tree(n_concepts)
 
     #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = st.Student2(n_concepts)
+    student2 = st.Student2(n_concepts, transition_after)
     test_student = student2
 
     accs = Parallel(n_jobs=n_jobs)(delayed(test_student_exact_chunk)(traj_per_job, dgraph, test_student, horizon, n_rollouts, use_greedy, sparse_r) for _ in range(n_jobs))
@@ -269,7 +269,7 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollou
         best_q += best_q_value
     return acc, best_q
 
-def test_dkt(model_id, n_concepts, horizon, n_rollouts, n_trajectories, r_type, use_real, chkpt=None):
+def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_trajectories, r_type, use_real, chkpt=None):
     '''
     Test DKT+MCTS
     '''
@@ -287,7 +287,7 @@ def test_dkt(model_id, n_concepts, horizon, n_rollouts, n_trajectories, r_type, 
     dgraph.init_default_tree(n_concepts)
 
     #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = st.Student2(n_concepts)
+    student2 = st.Student2(n_concepts, transition_after)
     test_student = student2
     
     test_student.reset()
@@ -369,7 +369,7 @@ def test_dkt_qval(model_id, n_rollouts, r_type, chkpt=None):
     dgraph.init_default_tree(n_concepts)
 
     #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = st.Student2(n_concepts)
+    student2 = st.Student2(n_concepts, transition_after)
     test_student = student2
     
     # load the model
@@ -428,7 +428,7 @@ def test_dkt_extract_policy(model_id, n_rollouts, r_type, chkpt=None):
     dgraph.init_default_tree(n_concepts)
 
     #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = st.Student2(n_concepts)
+    student2 = st.Student2(n_concepts, transition_after)
     test_student = student2
     
     # load the model
@@ -574,7 +574,7 @@ def dkt_test_policy(model_id, horizon, n_trajectories, r_type, chkpt):
     dgraph = cdg.ConceptDependencyGraph()
     dgraph.init_default_tree(n_concepts)
     
-    student2 = st.Student2(n_concepts)
+    student2 = st.Student2(n_concepts, transition_after)
     
     # load model from given file
     model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
@@ -618,7 +618,7 @@ def dkt_test_policies_rme(model_id, n_trajectories, r_type, policies, chkpt):
     dgraph = cdg.ConceptDependencyGraph()
     dgraph.init_default_tree(n_concepts)
     
-    student2 = st.Student2(n_concepts)
+    student2 = st.Student2(n_concepts, transition_after)
     
     # load model from given file
     model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
@@ -750,7 +750,8 @@ def dkt_test_models_mcts(trainparams,mctsparams):
             
             # test dkt
             score, qval = test_dkt(
-                trainparams.model_id, trainparams.n_concepts, mctsparams.horizon, mctsparams.n_rollouts, mctsparams.n_trajectories,
+                trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, 
+                mctsparams.horizon, mctsparams.n_rollouts, mctsparams.n_trajectories,
                 mctsparams.r_type, mctsparams.use_real, chkpt=checkpoint_path)
             
             # update stats
@@ -934,10 +935,11 @@ if __name__ == '__main__':
             #self.model_id = 'test2_model_small'
             self.model_id = model_id
             self.n_concepts = 4
+            self.transition_after = True
             self.dropout = 1.0
             self.shuffle = False
             self.seqlen = 7
-            self.datafile = 'test2-n100000-l{}-egreedy0.30.pickle'.format(self.seqlen) # < 6 is already no full mastery
+            self.datafile = 'test2a-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
             self.saved_epochs = saved_epochs
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
@@ -1027,11 +1029,19 @@ if __name__ == '__main__':
     
     # student2 4 skills with training trajectory length 7, random behavior policy, mid-size model
     # trying to determine when to stop
-    cur_train = [TrainParams('runA',10,'test2_model_mid', [20]), TrainParams('runA',10,'test2_modelsimple_mid',[20]), TrainParams('runA',10,'test2_modelgru_mid',[20])]
+    #cur_train = [TrainParams('runA',10,'test2_model_mid', [20]), TrainParams('runA',10,'test2_modelsimple_mid',[20]), TrainParams('runA',10,'test2_modelgru_mid',[20])]
+    #cur_train = [TrainParams('runB',50,'test2_model_mid', [6]), TrainParams('runB',50,'test2_modelsimple_mid',[5]),TrainParams('runB',50,'test2_modelgru_mid',[4])]
+    
+    # student2 4 skills with training trajectory length 7, random behavior policy, model student2a domain
+    # mid-size models
+    # trying to determine when to stop
+    #cur_train = [TrainParams('runA',10,'test2_model_mid', [20]), TrainParams('runA',10,'test2_modelsimple_mid',[20]), TrainParams('runA',10,'test2_modelgrusimple_mid',[20])]
+    
+    cur_train = [TrainParams('runA',50,'test2_model_mid', [11]), TrainParams('runA',50,'test2_modelsimple_mid',[11]), TrainParams('runA',50,'test2_modelgrusimple_mid',[7])]
     
     for ct in cur_train:
         pass
-        dkt_train_models(ct)
+        #dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1151,7 +1161,7 @@ if __name__ == '__main__':
     tp = TestParams()
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(TrainParams(),TestParams())
         #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)

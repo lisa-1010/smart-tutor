@@ -109,12 +109,16 @@ class Student2(object):
     '''
     Special Deterministic Student to facilitate testing. Should be easier to learn than probabilistic student.
     Instead of a probability of mastering a skill when prereqs are fulfilled, always need exactly two tries.
-    This means the first try is always a fail, and second try is always a success.
+    This means the first try is always a fail. And only after the second try does the student learn.
     Deterministic observations still.
+    
+    Can either transition before the observation or after the observation.
+    This means either the second try is always a pass, or it's a fail and the 3rd try is a pass.
     '''
-    def __init__(self, n_concepts):
+    def __init__(self, n_concepts, transition_after):
         self.knowledge = np.zeros((n_concepts,))
         self.visited = np.zeros((n_concepts,)).astype(np.int)
+        self.transition_after = transition_after
 
     def reset(self):
         self.knowledge = np.zeros(self.knowledge.shape)
@@ -124,16 +128,16 @@ class Student2(object):
         '''
         Copies this generator.
         '''
-        new_student = Student2(1)
+        new_student = Student2(1, False)
         new_student.knowledge = np.copy(self.knowledge)
         new_student.visited = np.copy(self.visited)
+        new_student.transition_after = self.transition_after
         return new_student
     
-    def do_exercise(self, concept_tree, ex):
+    def update_knowledge(self, concept_tree, ex):
         '''
-        Simulates solving the provided exercise.
-        :param ex: an Exercise object.
-        :return: Returns 1 if student solved it correctly, 0 otherwise.
+        Half of an update. This updates the student's knowledge.
+        This can be called before, or after the observation.
         '''
         if self.fulfilled_prereqs(concept_tree, ex.concepts):
             for c in xrange(len(ex.concepts)):
@@ -143,8 +147,27 @@ class Student2(object):
                         # if yes, then this is second time visited so yes mastery
                         self.knowledge[c] = 1
                     # concept has been visited
-                    self.visited[c] = 1                
+                    self.visited[c] = 1
+    
+    def try_exercise(self, concept_tree, ex):
+        '''
+        Get an observation of whether the student gets the question correct without updating the knowledge.
+        '''
         return self.learned_all_concepts_in_ex(ex.concepts)
+    
+    def do_exercise(self, concept_tree, ex):
+        '''
+        Simulates solving the provided exercise.
+        :param ex: an Exercise object.
+        :return: Returns 1 if student solved it correctly, 0 otherwise.
+        '''
+        if not self.transition_after:
+            self.update_knowledge(concept_tree, ex)
+            ob = self.try_exercise(concept_tree, ex)
+        else:
+            ob = self.try_exercise(concept_tree, ex)
+            self.update_knowledge(concept_tree, ex)
+        return ob
 
 
     def fulfilled_prereqs(self, concept_tree, concepts):
