@@ -932,13 +932,12 @@ if __name__ == '__main__':
         Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
         '''
         def __init__(self, rname, nruns, model_id, saved_epochs):
-            #self.model_id = 'test2_model_small'
             self.model_id = model_id
             self.n_concepts = 4
             self.transition_after = True
             self.dropout = 1.0
             self.shuffle = False
-            self.seqlen = 7
+            self.seqlen = 5
             self.datafile = 'test2a-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
             self.saved_epochs = saved_epochs
@@ -1037,11 +1036,26 @@ if __name__ == '__main__':
     # trying to determine when to stop
     #cur_train = [TrainParams('runA',10,'test2_model_mid', [20]), TrainParams('runA',10,'test2_modelsimple_mid',[20]), TrainParams('runA',10,'test2_modelgrusimple_mid',[20])]
     
-    cur_train = [TrainParams('runA',50,'test2_model_mid', [11]), TrainParams('runA',50,'test2_modelsimple_mid',[11]), TrainParams('runA',50,'test2_modelgrusimple_mid',[7])]
+    #cur_train = [TrainParams('runA',50,'test2_model_mid', [11]), TrainParams('runA',50,'test2_modelsimple_mid',[11]), TrainParams('runA',50,'test2_modelgrusimple_mid',[7])]
+    
+    #small-size models
+    # trying to determine when to stop
+    cur_train = [TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgrusimple_small',[20])]
+    
+    #cur_train = [TrainParams('runB',50,'test2_modelsimple_small',[]), TrainParams('runB',50,'test2_modelgrusimple_small',[])]
+    
+    # student2 4 skills with training trajectory length 5, random behavior policy, model student2a domain
+    # small-size models
+    # try only the two simple architectures
+    # first determine when to stop
+    #cur_train = [TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgrusimple_small',[20])]
+    
+    # testing with 50 points
+    #cur_train = [TrainParams('runB',50,'test2_modelsimple_small',[14]), TrainParams('runB',50,'test2_modelgrusimple_small',[18])]
     
     for ct in cur_train:
         pass
-        #dkt_train_models(ct)
+        dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1161,7 +1175,7 @@ if __name__ == '__main__':
     tp = TestParams()
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(TrainParams(),TestParams())
         #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)
