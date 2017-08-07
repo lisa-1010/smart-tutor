@@ -351,17 +351,15 @@ def test_dkt_rme(model_id, n_rollouts, n_trajectories, r_type, dmcmodel, chkpt):
     print('Average best q: {}'.format(avg_best_q))
     return avg_acc, avg_best_q
 
-def test_dkt_qval(model_id, n_rollouts, r_type, chkpt=None):
+def test_dkt_qval(model_id, n_concepts, transition_after, horizon, n_rollouts, r_type, chkpt=None):
     '''
     Test DKT+MCTS with loads of rollouts to estimate the initial qval
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     
-    n_concepts = 4
     use_greedy = False
     #learn_prob = 0.5
-    horizon = 6
 
     #dgraph = create_custom_dependency()
 
@@ -410,17 +408,15 @@ def test_dkt_qval(model_id, n_rollouts, r_type, chkpt=None):
     return qval
 
 
-def test_dkt_extract_policy(model_id, n_rollouts, r_type, chkpt=None):
+def test_dkt_extract_policy(model_id, n_concepts, transition_after, horizon, n_rollouts, r_type, chkpt=None):
     '''
     Test DKT+MCTS to extract out the policy used in the real domain. Also return the qvals.
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     
-    n_concepts = 4
     use_greedy = False
     #learn_prob = 0.5
-    horizon = 6
 
     #dgraph = create_custom_dependency()
 
@@ -782,7 +778,7 @@ def dkt_test_models_mcts_qval(trainparams,mctsparams):
             
             # test dkt
             qval = test_dkt_qval(
-                trainparams.model_id, mctsparams.initialq_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
+                trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, mctsparams.horizon, mctsparams.initialq_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
             
             # update stats
             qvals[r].append(qval)
@@ -812,7 +808,7 @@ def dkt_test_models_extract_policy(trainparams,mctsparams):
             
             # test dkt
             optpolicy, qfunc = test_dkt_extract_policy(
-                trainparams.model_id, mctsparams.policy_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
+                trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, mctsparams.horizon, mctsparams.policy_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
             
             # update stats
             optpolicies[r].append(optpolicy)
@@ -931,12 +927,12 @@ if __name__ == '__main__':
         '''
         Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
         '''
-        def __init__(self, rname, nruns, model_id, saved_epochs):
+        def __init__(self, rname, nruns, model_id, saved_epochs, dropout=1.0):
             self.model_id = model_id
             self.n_concepts = 4
             self.transition_after = True
-            self.dropout = 1.0
-            self.shuffle = False
+            self.dropout = dropout
+            self.shuffle = True
             self.seqlen = 5
             self.datafile = 'test2a-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
@@ -1040,9 +1036,10 @@ if __name__ == '__main__':
     
     #small-size models
     # trying to determine when to stop
-    cur_train = [TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgrusimple_small',[20])]
+    #cur_train = [TrainParams('runA',10,'test2_modelsimple_small',[20]), TrainParams('runA',10,'test2_modelgrusimple_small',[20])]
     
-    #cur_train = [TrainParams('runB',50,'test2_modelsimple_small',[]), TrainParams('runB',50,'test2_modelgrusimple_small',[])]
+    # testing first with 20 points
+    #cur_train = [TrainParams('runB',20,'test2_modelsimple_small',[20]), TrainParams('runB',20,'test2_modelgrusimple_small',[14])]
     
     # student2 4 skills with training trajectory length 5, random behavior policy, model student2a domain
     # small-size models
@@ -1052,6 +1049,26 @@ if __name__ == '__main__':
     
     # testing with 50 points
     #cur_train = [TrainParams('runB',50,'test2_modelsimple_small',[14]), TrainParams('runB',50,'test2_modelgrusimple_small',[18])]
+    
+    # mid-size models now, hopefully they do better
+    # first determine when to stop
+    #cur_train = [TrainParams('runA',10,'test2_modelsimple_mid',[20]), TrainParams('runA',10,'test2_modelgrusimple_mid',[20])]
+    
+    # testing first with 20 points
+    #cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[12]), TrainParams('runB',20,'test2_modelgrusimple_mid',[8])]
+    
+    # trying out 2 more architectures of double lstm which seem like it might be good at generalization
+    # first determine when to stop
+    #cur_train = [TrainParams('runA',10,'test2_model_small',[20]), TrainParams('runA',10,'test2_model_mid',[20])]
+    
+    # first test with 20 points
+    #cur_train = [TrainParams('runB',20,'test2_model_small',[18]), TrainParams('runB',20,'test2_model_mid',[11])]
+    
+    # pick the single LSTM model small and try out further experiments
+    #cur_train = [TrainParams('runB',50,'test2_modelsimple_small',[14])]
+    
+    # use dropout, and first try to find stopping point, and use shuffle to smooth training
+    cur_train = [TrainParams('runA',10,'test2_modelsimple_small',[40], dropout=0.8)]
     
     for ct in cur_train:
         pass
@@ -1063,9 +1080,9 @@ if __name__ == '__main__':
         Parameters for testing models with MCTS/policies. For testing student2 with 4 skills.
         '''
         def __init__(self, use_real=True):
-            self.r_type = SPARSE
-            self.n_rollouts = 3000
-            self.n_trajectories = 100
+            self.r_type = SEMISPARSE
+            self.n_rollouts = 20000
+            self.n_trajectories = 10
             self.use_real = use_real
             self.horizon = 6
             
@@ -1148,6 +1165,7 @@ if __name__ == '__main__':
     
     #----------------------------------------------------------------------
     # test the saved models
+    # don't train and test at the same time, alternate between them
     
     # read the optpolicies from data
     if False:
@@ -1176,8 +1194,6 @@ if __name__ == '__main__':
     for ct in cur_train:
         pass
         #dkt_test_models_mcts(ct,tp)
-        #dkt_test_models_mcts_qval(TrainParams(),TestParams())
-        #dkt_test_models_rme(ct,tp,opts2)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
