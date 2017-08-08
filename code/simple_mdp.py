@@ -116,15 +116,15 @@ class SimpleFMDP(object):
         # converts a binary numpy array to a state index
         ix = 0
         acc = 1
-        for i in xrange(self.n_concepts):
+        for i in xrange(knowledge.shape[0]):
             ix += acc * knowledge[i]
             acc *= 2
         return int(ix)
     
     def _i2b(self, ix):
         # converts a state index to a binary numpy array
-        state = np.zeros((self.n_concepts,))
-        for i in xrange(self.n_concepts):
+        state = np.zeros((self.n_features,))
+        for i in xrange(self.n_features):
             state[i] = ix % 2
             ix //= 2
         return state
@@ -132,6 +132,16 @@ class SimpleFMDP(object):
     def _a2i(self, conceptvec):
         # gets the index of a conceptvec
         return np.nonzero(conceptvec)[0][0]
+    
+    def _subset2ix(self, ss):
+        ssarray = np.zeros((self.n_features,)).astype(np.int)
+        for i in ss:
+            ssarray[i] = 1
+        return self._b2i(ssarray)
+    
+    def _ix2subset(self, ix):
+        ssarray = self._i2b(ix)
+        return np.nonzero(ssarray)
     
     def train(self, data):
         '''
@@ -153,6 +163,7 @@ class SimpleFMDP(object):
         
         # go through data and collect statistics for p(i | action, j,k) for all features i,j,k
         for i in xrange(len(data)):
+            six.print_(i)
             # each trajectory
             # assume students start with concept 0 learned
             for t in xrange(len(data[i])-1):
@@ -161,17 +172,24 @@ class SimpleFMDP(object):
                 curr_a = self._a2i(data[i][t][0])
                 next_s = (data[i][t+1][3])
                 #six.print_('{} {} {}'.format(curr_s, curr_a, next_s))
-                for (f11,f12,f21,f22) in itertools.product(six.moves.range(self.n_features),repeat=4):
-                    self.visit_count[curr_a,f11,curr_s[f11],f12,curr_s[f12],f21,curr_s[f21],f22,curr_s[f22]] += 1
-                    for nextf in six.moves.range(self.n_features):
-                        self.transition_count[nextf, curr_a,f11,curr_s[f11],f12,curr_s[f12],f21,curr_s[f21],f22,curr_s[f22]] += next_s[nextf]
+                for (f11,f12) in itertools.product(six.moves.range(self.n_features),repeat=2):
+                    if f11 == f12:
+                        continue
+                    for (f21,f22) in itertools.product(six.moves.range(self.n_features),repeat=2):
+                        if f21 == f22 or (f11,f12) == (f21,f22) or (f11,f12) == (f22,f21):
+                            continue
+                        self.visit_count[curr_a,f11,curr_s[f11],f12,curr_s[f12],f21,curr_s[f21],f22,curr_s[f22]] += 1
+                        for nextf in six.moves.range(self.n_features):
+                            self.transition_count[nextf, curr_a,f11,curr_s[f11],f12,curr_s[f12],f21,curr_s[f21],f22,curr_s[f22]] += next_s[nextf]
         
         # for each feature, find its parent
         for f in six.moves.range(self.n_features):
+            six.print_('Feature {}:'.format(f))
             # try out each feature as a parent, keeping track of which parent has lowest conditional diff
             lowest_diff = None
-            best_pf = None
+            best_pf = []
             for (pf1,pf2) in itertools.product(six.moves.range(self.n_features), repeat=2):
+                #six.print_('Try parent set ({} {})'.format(pf1,pf2))
                 # try 2 parents
                 if pf1 == pf2:
                     continue
@@ -190,9 +208,17 @@ class SimpleFMDP(object):
                         # look for the largest diff
                         worst_diff_inner = None
                         for (ppf1,ppf2) in itertools.product(six.moves.range(self.n_features), repeat=2):
-                            if ppf1 == ppf2 or ppf1 == pf1 or ppf1 == pf2 or ppf2 == pf1 or ppf2 == pf2:
+                            if ppf1 == ppf2 or (pf1,pf2) == (ppf1,ppf2) or (pf1,pf2) == (ppf2,ppf1):
                                 continue
                             for (ffv1,ffv2) in itertools.product((0,1),repeat=2):
+                                if pf1 == ppf1 and fv1 != ffv1:
+                                    continue
+                                elif pf1 == ppf2 and fv1 != ffv2:
+                                    continue
+                                elif pf2 == ppf1 and fv2 != ffv1:
+                                    continue
+                                elif pf2 == ppf2 and fv2 != ffv2:
+                                    continue
                                 if curr_visit_counts[ppf1,ffv1,ppf2,ffv2] <= 0:
                                     continue
                                 curr_prob_inner = curr_transition_counts[ppf1,ffv1,ppf2,ffv2] / curr_visit_counts[ppf1,ffv1,ppf2,ffv2]
@@ -204,10 +230,26 @@ class SimpleFMDP(object):
                         #    six.print_('{} {}'.format(curr_transition_counts, curr_visit_counts))
                         if worst_diff is None or worst_diff < worst_diff_inner:
                             worst_diff = worst_diff_inner
+                        if worst_diff is not None and worst_diff > 0.2:
+                            # break early since we've found a counterexample
+                            break
                 if lowest_diff is None or lowest_diff > worst_diff:
                     lowest_diff = worst_diff
-                    best_pf = (pf1,pf2)
+                    best_pf = [(pf1,pf2)]
+                elif lowest_diff == worst_diff:
+                    best_pf.append((pf1,pf2))
             six.print_('{} {}'.format(lowest_diff, best_pf))
+            # print out the probabilities
+            pf1, pf2 = best_pf[0]
+            for (fv1,fv2) in itertools.product((0,1),repeat=2):
+                # each value of parent set
+                for action in six.moves.range(self.n_concepts):
+                    # for each action - we assume all actions have same parent
+                    curr_visit_counts = self.visit_count[action,pf1,fv1,pf2,fv2,:,:,:,:]
+                    curr_transition_counts = self.transition_count[f,action,pf1,fv1,pf2,fv2,:,:,:,:]
+                    curr_count = np.sum(curr_visit_counts)
+                    curr_prob = np.sum(curr_transition_counts) / curr_count
+                    six.print_('({},{}) action {} prob {}'.format(fv1,fv2,action,curr_prob))
         pass
 
 def create_custom_dependency():
@@ -285,7 +327,7 @@ def percent_all_seen(data):
 if __name__ == '__main__':
     # test out the model
     n_concepts = 4
-    horizon = 5
+    horizon = 6
     
     #dgraph = create_custom_dependency()
     
@@ -296,7 +338,7 @@ if __name__ == '__main__':
     #student = Student(n=n_concepts,p_trans_satisfied=0.15, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
     student2 = Student2(n_concepts, transition_after=True)
     
-    data = generate_data(dgraph, student=student2, n_students=10000, filter_mastery=False, seqlen=horizon, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, student=student2, n_students=1000, filter_mastery=False, seqlen=horizon, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
     print('Average sprase posttest: {}'.format(expected_sparse_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
