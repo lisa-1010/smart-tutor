@@ -933,7 +933,7 @@ if __name__ == '__main__':
             self.transition_after = True
             self.dropout = dropout
             self.shuffle = True
-            self.seqlen = 5
+            self.seqlen = 6
             self.datafile = 'test2a-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
             self.saved_epochs = saved_epochs
@@ -1072,11 +1072,20 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runA',10,'test2_modelsimple_mid',[50], dropout=0.8)]
     
     # first try testing 20 models
-    cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[30], dropout=0.8)]
+    #cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[30], dropout=0.8)]
+    
+    # student2 4 skills with training trajectory length 6, random, student2a domain
+    # midsize model
+    # first try to find when to stop
+    #cur_train = [TrainParams('runA',10,'test2_modelsimple_mid',[20])]
+    # first try testing 20 models
+    cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[12])]
+    # now continue with 30 models
+    cur_train = [TrainParams('runC',30,'test2_modelsimple_mid',[12])]
     
     for ct in cur_train:
         pass
-        #dkt_train_models(ct)
+        dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1197,7 +1206,7 @@ if __name__ == '__main__':
     tp = TestParams()
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
