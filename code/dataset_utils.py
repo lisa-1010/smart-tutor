@@ -106,8 +106,8 @@ def preprocess_data_for_rnn(data):
         for t in xrange(n_timesteps-1):
             cur_sample = data[i][t]
             next_sample = data[i][t+1]
-            exer, perf, knowl = cur_sample
-            next_exer, next_perf, next_knowl = next_sample
+            exer, perf, knowl = cur_sample[0], cur_sample[1], cur_sample[2]
+            next_exer, next_perf, next_knowl = next_sample[0], next_sample[1], next_sample[2]
             next_exer_ix = np.argmax(next_exer)
 
             observ = np.zeros(2*len(exer))

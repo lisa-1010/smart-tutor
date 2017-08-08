@@ -60,6 +60,12 @@ class Student(object):
         new_student.p_get_ex_correct_if_concepts_learned = self.p_get_ex_correct_if_concepts_learned
         new_student.knowledge = np.copy(self.knowledge)
         return new_student
+    
+    def get_state(self):
+        '''
+        Return the state of this simulated student if the student was an MDP
+        '''
+        return self.knowledge.astype(np.int)
 
     def do_exercise(self, concept_tree, ex):
         '''
@@ -133,6 +139,12 @@ class Student2(object):
         new_student.visited = np.copy(self.visited)
         new_student.transition_after = self.transition_after
         return new_student
+    
+    def get_state(self):
+        '''
+        Return the state of this simulated student if the student was an MDP
+        '''
+        return np.concatenate((self.knowledge, self.visited)).astype(np.int)
     
     def update_knowledge(self, concept_tree, ex):
         '''

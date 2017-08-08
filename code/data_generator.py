@@ -139,10 +139,13 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
     # Go through sequence of exercises and record whether student solved each or not
     student_performance = []
     student_knowledge = []
+    student_state = []
     n_exercises_to_mastery = -1
     exercises = [] # so we can store sequence of exercises as numpy arrays (instead of arrays of exercise objects)
     for i in xrange(seqlen):
         # print (s.knowledge)
+        # store current states
+        student_state.append(s.get_state())
         if policy == 'expert':
             concepts = sample_expert_action(concept_tree, s.knowledge)
             ex = exer.Exercise(concepts=concepts)
@@ -164,7 +167,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         else:
             print ("Did not learn all concepts after doing {} exercises.".format(seqlen))
     # print (student_knowledge)
-    student_sample = zip(exercises, student_performance, student_knowledge)
+    student_sample = zip(exercises, student_performance, student_knowledge, student_state)
     return student_sample
 
 

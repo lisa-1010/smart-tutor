@@ -3,18 +3,22 @@
 #===============================================================================
 # DESCRIPTION:
 # This module implements a simple MDP model that learns from the student data.
-# It treats the students as MDPs and has full access to the student knowledge.
-#
+# It treats the students as MDPs and has full access to the student state.
+# 
+# It also has a simple FMDP model that treats the student as FMDPs.
+# It also has full access to the student state
 #===============================================================================
 # CURRENT STATUS: In Progress
 #===============================================================================
 # USAGE: import simple_mdp as sm
 
 import numpy as np
+import six
 
 from concept_dependency_graph import *
 from data_generator import *
-from student import Student
+from student import Student, Student2
+import itertools
 
 class SimpleMDP(object):
     def __init__(self):
@@ -103,7 +107,109 @@ class SimpleMDP(object):
                     rhs = self._reward(x,c) + gamma*rhs
                     maxdiff = max(maxdiff, abs(self.q[x,c] - rhs))
                     self.q[x,c] = rhs
+
+class SimpleFMDP(object):
+    def __init__(self):
+        pass
+    
+    def _b2i(self, knowledge):
+        # converts a binary numpy array to a state index
+        ix = 0
+        acc = 1
+        for i in xrange(self.n_concepts):
+            ix += acc * knowledge[i]
+            acc *= 2
+        return int(ix)
+    
+    def _i2b(self, ix):
+        # converts a state index to a binary numpy array
+        state = np.zeros((self.n_concepts,))
+        for i in xrange(self.n_concepts):
+            state[i] = ix % 2
+            ix //= 2
+        return state
+    
+    def _a2i(self, conceptvec):
+        # gets the index of a conceptvec
+        return np.nonzero(conceptvec)[0][0]
+    
+    def train(self, data):
+        '''
+        :param data: this is the output from generate_data
         
+        Assume degree is 1.
+        '''
+        self.n_concepts = data[0][0][2].shape[0]
+        self.n_features = data[0][0][3].shape[0]
+        self.n_states = 2**self.n_features
+        six.print_('{} {} {}'.format(self.n_concepts, self.n_features, self.n_states))
+        
+        # transition_count[next feature i][action][parent1 feature 1][val1][parent1 feature 2][val2][parent2 feature 2][val2][parent2 feature 2][val2] = count
+        # visit_count[action][parent feature 1][val1][parent feature 2][val2][parent2 feature 1][val1][parent2 feature 2][val2] = count
+        self.visit_count = np.zeros((self.n_concepts, self.n_features, 2, self.n_features, 2, self.n_features, 2, self.n_features, 2), dtype=np.int)
+        self.transition_count = np.zeros((self.n_features, self.n_concepts, self.n_features, 2, self.n_features, 2, self.n_features, 2, self.n_features, 2), dtype=np.int)
+        six.print_(self.visit_count.shape)
+        six.print_(self.transition_count.shape)
+        
+        # go through data and collect statistics for p(i | action, j,k) for all features i,j,k
+        for i in xrange(len(data)):
+            # each trajectory
+            # assume students start with concept 0 learned
+            for t in xrange(len(data[i])-1):
+                # each timestep and next timestep
+                curr_s = (data[i][t][3])
+                curr_a = self._a2i(data[i][t][0])
+                next_s = (data[i][t+1][3])
+                #six.print_('{} {} {}'.format(curr_s, curr_a, next_s))
+                for (f11,f12,f21,f22) in itertools.product(six.moves.range(self.n_features),repeat=4):
+                    self.visit_count[curr_a,f11,curr_s[f11],f12,curr_s[f12],f21,curr_s[f21],f22,curr_s[f22]] += 1
+                    for nextf in six.moves.range(self.n_features):
+                        self.transition_count[nextf, curr_a,f11,curr_s[f11],f12,curr_s[f12],f21,curr_s[f21],f22,curr_s[f22]] += next_s[nextf]
+        
+        # for each feature, find its parent
+        for f in six.moves.range(self.n_features):
+            # try out each feature as a parent, keeping track of which parent has lowest conditional diff
+            lowest_diff = None
+            best_pf = None
+            for (pf1,pf2) in itertools.product(six.moves.range(self.n_features), repeat=2):
+                # try 2 parents
+                if pf1 == pf2:
+                    continue
+                worst_diff = None
+                for (fv1,fv2) in itertools.product((0,1),repeat=2):
+                    # each value of parent set
+                    for action in six.moves.range(self.n_concepts):
+                        # for each action - we assume all actions have same parent
+                        curr_visit_counts = self.visit_count[action,pf1,fv1,pf2,fv2,:,:,:,:]
+                        curr_transition_counts = self.transition_count[f,action,pf1,fv1,pf2,fv2,:,:,:,:]
+                        curr_count = np.sum(curr_visit_counts)
+                        if curr_count <= 0:
+                            # didn't see this, so continue
+                            continue
+                        curr_prob = np.sum(curr_transition_counts) / curr_count
+                        # look for the largest diff
+                        worst_diff_inner = None
+                        for (ppf1,ppf2) in itertools.product(six.moves.range(self.n_features), repeat=2):
+                            if ppf1 == ppf2 or ppf1 == pf1 or ppf1 == pf2 or ppf2 == pf1 or ppf2 == pf2:
+                                continue
+                            for (ffv1,ffv2) in itertools.product((0,1),repeat=2):
+                                if curr_visit_counts[ppf1,ffv1,ppf2,ffv2] <= 0:
+                                    continue
+                                curr_prob_inner = curr_transition_counts[ppf1,ffv1,ppf2,ffv2] / curr_visit_counts[ppf1,ffv1,ppf2,ffv2]
+                                curr_diff_inner = np.abs(curr_prob - curr_prob_inner)
+                                if worst_diff_inner is None or worst_diff_inner < curr_diff_inner:
+                                    worst_diff_inner = curr_diff_inner
+                        #six.print_('f {} pf {} fv {} action {} prob {} diffinner {}'.format(f,pf,fv,action,curr_prob,worst_diff_inner))
+                        #if worst_diff_inner > 0.5:
+                        #    six.print_('{} {}'.format(curr_transition_counts, curr_visit_counts))
+                        if worst_diff is None or worst_diff < worst_diff_inner:
+                            worst_diff = worst_diff_inner
+                if lowest_diff is None or lowest_diff > worst_diff:
+                    lowest_diff = worst_diff
+                    best_pf = (pf1,pf2)
+            six.print_('{} {}'.format(lowest_diff, best_pf))
+        pass
+
 def create_custom_dependency():
     '''
     Creates the following dependency tree (where 0 is a prerequisite of 1)
@@ -179,7 +285,7 @@ def percent_all_seen(data):
 if __name__ == '__main__':
     # test out the model
     n_concepts = 4
-    horizon = 6
+    horizon = 5
     
     #dgraph = create_custom_dependency()
     
@@ -188,55 +294,14 @@ if __name__ == '__main__':
     
     # custom student
     #student = Student(n=n_concepts,p_trans_satisfied=0.15, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = Student2(n_concepts)
+    student2 = Student2(n_concepts, transition_after=True)
     
-    data = generate_data(dgraph, student=student2, n_students=100000, filter_mastery=True, seqlen=horizon, policy='random', filename=None, verbose=False)
+    data = generate_data(dgraph, student=student2, n_students=10000, filter_mastery=False, seqlen=horizon, policy='random', filename=None, verbose=False)
     print('Average posttest: {}'.format(expected_reward(data)))
+    print('Average sprase posttest: {}'.format(expected_sparse_reward(data)))
     print('Percent of full posttest score: {}'.format(percent_complete(data)))
     print('Percent of all seen: {}'.format(percent_all_seen(data)))
-    # for seqlen=5 expert=0.68
-    # seqlen=3 seems to be the point where there should be enough information to generalize the optimal policy
     
-    #smdp = SimpleMDP()
-    #smdp.train(data)
-    #smdp.vi(0.95)
-    '''
-    What should be the optimal policy?
-    00000
-    10000 [1 2]
-    01000
-    11000 [2 3]
-    00100
-    10100 [1 4]
-    01100
-    11100 [3 4]
-    00010
-    10010
-    01010
-    11010 [2]
-    00110
-    10110
-    01110
-    11110 [4]
-    00001
-    10001
-    01001
-    11001
-    00101
-    10101 [1]
-    01101
-    11101 [3]
-    00011
-    10011
-    01011
-    11011
-    00111
-    10111
-    01111
-    11111
-    The states left blank are impossible states
-    '''
-    #for i,acts in [(1,[1,2]),(3,[2,3]),(5,[1,4]),(7,[3,4]),(11,[2]),(15,[4]),(21,[1]),(23,[3])]:
-    #    policy_a = np.argmax(smdp.q[i,:])
-    #    print('{} {}'.format(policy_a in acts, smdp.q[i,:]))
+    fmdp = SimpleFMDP()
+    fmdp.train(data)
     
