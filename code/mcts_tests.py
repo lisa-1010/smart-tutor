@@ -1079,13 +1079,13 @@ if __name__ == '__main__':
     # first try to find when to stop
     #cur_train = [TrainParams('runA',10,'test2_modelsimple_mid',[20])]
     # first try testing 20 models
-    cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[12])]
+    #cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[12])]
     # now continue with 30 models
     cur_train = [TrainParams('runC',30,'test2_modelsimple_mid',[12])]
     
     for ct in cur_train:
         pass
-        dkt_train_models(ct)
+        #dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1206,7 +1206,7 @@ if __name__ == '__main__':
     tp = TestParams()
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
