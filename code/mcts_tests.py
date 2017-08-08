@@ -1067,12 +1067,16 @@ if __name__ == '__main__':
     # pick the single LSTM model small and try out further experiments
     #cur_train = [TrainParams('runB',50,'test2_modelsimple_small',[14])]
     
+    # pick the single LSTM mid size model and try further experiments
     # use dropout, and first try to find stopping point, and use shuffle to smooth training
-    cur_train = [TrainParams('runA',10,'test2_modelsimple_small',[40], dropout=0.8)]
+    #cur_train = [TrainParams('runA',10,'test2_modelsimple_mid',[50], dropout=0.8)]
+    
+    # first try testing 20 models
+    cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[30], dropout=0.8)]
     
     for ct in cur_train:
         pass
-        dkt_train_models(ct)
+        #dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1080,7 +1084,7 @@ if __name__ == '__main__':
         Parameters for testing models with MCTS/policies. For testing student2 with 4 skills.
         '''
         def __init__(self, use_real=True):
-            self.r_type = SEMISPARSE
+            self.r_type = SPARSE
             self.n_rollouts = 20000
             self.n_trajectories = 10
             self.use_real = use_real
@@ -1193,7 +1197,7 @@ if __name__ == '__main__':
     tp = TestParams()
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
