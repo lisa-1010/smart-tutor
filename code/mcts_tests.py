@@ -1078,10 +1078,16 @@ if __name__ == '__main__':
     # midsize model
     # first try to find when to stop
     #cur_train = [TrainParams('runA',10,'test2_modelsimple_mid',[20])]
+    #cur_train = [TrainParams('runA',10,'test2_modelgrusimple_mid',[20])]
+    
     # first try testing 20 models
     #cur_train = [TrainParams('runB',20,'test2_modelsimple_mid',[12])]
+    
     # now continue with 30 models
-    cur_train = [TrainParams('runC',30,'test2_modelsimple_mid',[12])]
+    #cur_train = [TrainParams('runC',30,'test2_modelsimple_mid',[12])]
+    
+    # try 50 with simple gru
+    cur_train = [TrainParams('runB',50,'test2_modelgrusimple_mid',[9])]
     
     for ct in cur_train:
         pass
