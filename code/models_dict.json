@@ -108,6 +108,18 @@
         "n_inputdim": 4,
         "n_outputdim": 2
     },
+    "test2w5_modelsimple_mid": {
+        "architecture": "simple",
+        "n_hidden": 10,
+        "n_inputdim": 10,
+        "n_outputdim": 5
+    },
+    "test2w5_modelgrusimple_mid": {
+        "architecture": "grusimple",
+        "n_hidden": 10,
+        "n_inputdim": 10,
+        "n_outputdim": 5
+    },
     "test2_model_drqn_mid": {
         "architecture": "default",
         "n_hidden": 10,

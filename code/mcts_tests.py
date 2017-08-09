@@ -927,14 +927,14 @@ if __name__ == '__main__':
         '''
         Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
         '''
-        def __init__(self, rname, nruns, model_id, saved_epochs, dropout=1.0):
+        def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0):
             self.model_id = model_id
-            self.n_concepts = 4
+            self.n_concepts = 5
             self.transition_after = True
             self.dropout = dropout
             self.shuffle = True
-            self.seqlen = 6
-            self.datafile = 'test2a-n100000-l{}-random.pickle'.format(self.seqlen) # < 6 is already no full mastery
+            self.seqlen = seqlen
+            self.datafile = 'test2a-w{}-n100000-l{}-random.pickle'.format(self.n_concepts, self.seqlen)
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
             self.saved_epochs = saved_epochs
             # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
@@ -1087,7 +1087,19 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runC',30,'test2_modelsimple_mid',[12])]
     
     # try 50 with simple gru
-    cur_train = [TrainParams('runB',50,'test2_modelgrusimple_mid',[9])]
+    #cur_train = [TrainParams('runB',50,'test2_modelgrusimple_mid',[9])]
+    
+    # student2a 5 skills with training trajectory length 6, random
+    # first try to find stopping epoch
+    #cur_train = [TrainParams('runA',10,'test2w5_modelgrusimple_mid',[40])]
+    # first try testing 20 models
+    #cur_train = [TrainParams('runB',20,'test2w5_modelgrusimple_mid',[28])]
+    
+    # student2a 5 skills with training trajectory length 7 and 8, random
+    # first try to find stopping epoch
+    #cur_train = [TrainParams('runA',10,'test2w5_modelgrusimple_mid',7,[30]), TrainParams('runA',10,'test2w5_modelgrusimple_mid',8,[30])]
+    # now try testing 20 models
+    cur_train = [TrainParams('runB',20,'test2w5_modelgrusimple_mid',7,[15]), TrainParams('runB',20,'test2w5_modelgrusimple_mid',8,[15])]
     
     for ct in cur_train:
         pass
@@ -1100,10 +1112,10 @@ if __name__ == '__main__':
         '''
         def __init__(self, use_real=True):
             self.r_type = SPARSE
-            self.n_rollouts = 20000
+            self.n_rollouts = 30000
             self.n_trajectories = 10
             self.use_real = use_real
-            self.horizon = 6
+            self.horizon = 8
             
             # for testing initialq values
             self.initialq_n_rollouts = 100000
