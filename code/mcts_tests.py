@@ -111,40 +111,7 @@ def test_student_exact_single(dgraph, stud, horizon, n_rollouts, r_type):
         #print('Next state: {}'.format(str(new_root.state)))
     return sim.get_knowledge()
 
-def test_student_exact_single_greedy(dgraph, stud, horizon, n_rollouts):
-    '''
-    Performs a single trajectory with the greedy 1-step policy and returns the final true student knowlegde.
-    '''
-    n_concepts = dgraph.n
-
-    # create the model and simulators
-    s = stud.copy()
-    s.reset()
-    s.knowledge[0] = 1 # initialize the first concept to be known
-    sim = st.StudentExactSim(s, dgraph)
-    model = sim.copy()
-
-    greedy = ExactGreedyPolicy(model, sim)
-
-    for i in range(horizon):
-        best_action = greedy.best_greedy_action(n_rollouts)
-
-        # debug check for whether action is optimal
-        if True:
-            opt_acts = compute_optimal_actions(sim.dgraph, sim.student.knowledge)
-            is_opt = best_action in opt_acts
-            if not is_opt:
-                print('ERROR {} executed non-optimal action {}'.format(sim.student.knowledge, best_action))
-                # now let's print out even more debugging information
-                #breadth_first_search(root, fnc=debug_visiter)
-                #return None
-
-        # act in the real environment
-        greedy.advance(best_action)
-    return sim.student.knowledge
-
-
-def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollouts, use_greedy, r_type):
+def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollouts, r_type):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -152,10 +119,7 @@ def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollout
     acc = 0.0
     for i in xrange(n_trajectories):
         print('traj i {}'.format(i))
-        if use_greedy:
-            k = test_student_exact_single_greedy(dgraph, student, horizon, n_rollouts)
-        else:
-            k = test_student_exact_single(dgraph, student, horizon, n_rollouts, r_type)
+        k = test_student_exact_single(dgraph, student, horizon, n_rollouts, r_type)
         acc += np.mean(k)
     return acc
 
@@ -171,7 +135,6 @@ def test_student_exact():
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
-    use_greedy = False
     r_type = DENSE
     n_concepts = 4
     learn_prob = 0.5
@@ -190,13 +153,12 @@ def test_student_exact():
     student2 = st.Student2(n_concepts, transition_after)
     test_student = student2
 
-    accs = Parallel(n_jobs=n_jobs)(delayed(test_student_exact_chunk)(traj_per_job, dgraph, test_student, horizon, n_rollouts, use_greedy, sparse_r) for _ in range(n_jobs))
+    accs = Parallel(n_jobs=n_jobs)(delayed(test_student_exact_chunk)(traj_per_job, dgraph, test_student, horizon, n_rollouts, sparse_r) for _ in range(n_jobs))
     avg = sum(accs) / (n_jobs * traj_per_job)
 
     test_data = dg.generate_data(dgraph, student=test_student, n_students=1000, seqlen=horizon, policy='expert', filename=None, verbose=False)
     print('Number of jobs {}'.format(n_jobs))
     print('Trajectory per job {}'.format(traj_per_job))
-    print('Use greedy? {}'.format(use_greedy))
     print('Average posttest true: {}'.format(expected_reward(test_data)))
     print('Average posttest mcts: {}'.format(avg))
 
@@ -237,7 +199,7 @@ def test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, u
         #print('Next state: {}'.format(str(new_root.state)))
     return sim.get_knowledge(), best_q_value
 
-def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=None, use_real=True):
+def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollouts, r_type, dktcache=None, use_real=True):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -259,11 +221,7 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollou
         #print('traj i {}'.format(i))
         # create the model and simulators
         sim = s.copy()
-        if not use_greedy:
-            k, best_q_value = test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, use_real)
-        else:
-            # This branch is DEPRECATED
-            assert(False)
+        k, best_q_value = test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, use_real)
         final_reward = np.sum(k)
         if r_type == SPARSE:
             final_reward = np.prod(k)
@@ -278,7 +236,6 @@ def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_traj
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     
-    use_greedy = False
     #learn_prob = 0.5
     n_jobs = 8
     traj_per_job =  n_trajectories // n_jobs
@@ -304,7 +261,7 @@ def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_traj
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, sim, model_id, chkpt, horizon, n_rollouts, use_greedy, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, sim, model_id, chkpt, horizon, n_rollouts, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
@@ -345,7 +302,7 @@ def test_dkt_rme(model_id, n_rollouts, n_trajectories, r_type, dmcmodel, chkpt):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, dktsim, model_id, chkpt, horizon, n_rollouts, False, r_type, dktcache=dktcache, use_real=True) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, dktsim, model_id, chkpt, horizon, n_rollouts, r_type, dktcache=dktcache, use_real=True) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
@@ -360,7 +317,6 @@ def test_dkt_qval(model_id, n_concepts, transition_after, horizon, n_rollouts, r
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     
-    use_greedy = False
     #learn_prob = 0.5
 
     #dgraph = create_custom_dependency()
@@ -417,7 +373,6 @@ def test_dkt_extract_policy(model_id, n_concepts, transition_after, horizon, n_r
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     
-    use_greedy = False
     #learn_prob = 0.5
 
     #dgraph = create_custom_dependency()
@@ -485,83 +440,6 @@ class ExtractCallback(tflearn.callbacks.Callback):
         self.tstates = []
     def on_epoch_end(self, training_state):
         self.tstates.append(copy.copy(training_state))
-
-def staggered_dkt_training(filename, model_id, seqlen, dropout, shuffle, reps, total_epochs, epochs_per_iter, sig_start, return_channel):
-    '''
-    DEPRECATED
-    This is supposed to be used in a separate process that trains a DKT epoch by epoch.
-    It waits for the parent process to send an Event signal before each training epoch.
-    It returns an intermediate value when done.
-    It also returns the training/validation losses.
-    '''
-    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, filename))
-    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
-    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
-    
-    for r in xrange(reps):
-        dmodel = dmc.DynamicsModel(model_id=model_id, timesteps=seqlen, dropout=dropout, load_checkpoint=False)
-        for ep in xrange(0,total_epochs,epochs_per_iter):
-            sig_start.wait()
-            sig_start.clear()
-            #print('Training rep {} epoch {}'.format(r, ep))
-            ecall = ExtractCallback()
-            dmodel.train(train_data, n_epoch=epochs_per_iter, callbacks=ecall, shuffle=shuffle, load_checkpoint=False)
-            return_channel.send(([c.global_loss for c in ecall.tstates],[c.val_loss for c in ecall.tstates]))
-
-def test_dkt_early_stopping():
-    '''
-    DEPRECATED
-    Performs an experiment where every few epochs of training we test with MCTS, and this is repeated.
-    '''
-    model_id = 'test2_model_small'
-    r_type = SEMISPARSE
-    dropout = 1.0
-    shuffle = False
-    n_rollouts = 1000
-    n_trajectories = 100
-    seqlen = 5
-    filename = 'test2-n100000-l{}-random.pickle'.format(seqlen) # < 6 is already no full mastery
-
-    total_epochs = 14
-    epochs_per_iter = 14
-    reps = 40
-    
-    sig_start = mp.Event()
-    (p_ch, c_ch) = mp.Pipe()
-    training_process = mp.Process(target=staggered_dkt_training,
-                                  args=(filename, model_id, seqlen, dropout, shuffle, reps, total_epochs, epochs_per_iter, sig_start, c_ch))
-    
-    losses = []
-    val_losses = []
-    score_eps = []
-    scores = []
-    best_qs = []
-    
-    training_process.start()
-    for r in xrange(reps):
-        losses.append(list())
-        val_losses.append(list())
-        score_eps.append(list())
-        scores.append(list())
-        best_qs.append(list())
-        for ep in xrange(0,total_epochs,epochs_per_iter):
-            print('=====================================')
-            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r+1, ep+epochs_per_iter))
-            print('=====================================')
-            sig_start.set() # signal the training to perform one epoch
-            ret_val = p_ch.recv() # wait until its done
-            losses[r].extend(ret_val[0])
-            val_losses[r].extend(ret_val[1])
-            
-            # now compute the policy estimate
-            score_eps[r].append(ep+epochs_per_iter)
-            score, _ = test_dkt(model_id, n_rollouts, n_trajectories, r_type, True)
-            _, best_q = test_dkt(model_id, n_rollouts, n_trajectories, r_type, False)
-            scores[r].append(score)
-            best_qs[r].append(best_q)
-    training_process.join() # finish up
-    
-    np.savez("earlystopping",losses=losses, vals=val_losses, eps=score_eps, scores=scores, qs=best_qs)
 
 def dkt_test_policy(model_id, horizon, n_trajectories, r_type, chkpt):
     '''

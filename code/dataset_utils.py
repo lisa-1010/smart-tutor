@@ -92,7 +92,8 @@ def preprocess_data_for_rnn(data):
     :return:
     """
     n_students = len(data)
-    n_timesteps = len(data[0])
+    n_timesteps = len(data[0])-1
+    assert n_timesteps > 0
     exer = data[0][0][0]
     n_concepts = len(exer)
     n_inputdim = 2 * n_concepts
@@ -103,7 +104,7 @@ def preprocess_data_for_rnn(data):
     output_mask = np.zeros((n_students, n_timesteps, n_outputdim))
     target_data = np.zeros((n_students, n_timesteps, n_outputdim))
     for i in xrange(n_students):
-        for t in xrange(n_timesteps-1):
+        for t in xrange(n_timesteps):
             cur_sample = data[i][t]
             next_sample = data[i][t+1]
             exer, perf, knowl = cur_sample[0], cur_sample[1], cur_sample[2]

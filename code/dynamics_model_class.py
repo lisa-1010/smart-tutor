@@ -110,7 +110,7 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="lstm_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
                                  loss='mean_square') # mean square works; binary crossentropy does not work for some reason
         return net, hidden_states_1, hidden_states_2
     
@@ -124,7 +124,7 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, None
 
@@ -136,7 +136,7 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.gru(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="gru_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, hidden_states_2
     
@@ -150,7 +150,7 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, None
     
