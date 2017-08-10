@@ -19,6 +19,7 @@ import multiprocessing as mp
 import six
 import os
 import random
+import itertools
 
 import constants
 import data_generator as dg
@@ -242,11 +243,12 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollou
     For parallelization to run in a separate thread/process.
     '''
     # load the model
+    # add 2 to the horizon since MCTS might look at horizon+1 steps
     if chkpt is not None:
-        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=False)
         model.load(chkpt)
     else:
-        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=True)
     # initialize the shared dktcache across MCTS trials
     if dktcache is None:
         dktcache = dict()
@@ -760,29 +762,35 @@ def dkt_test_models_mcts(trainparams,mctsparams):
     mctsstats_path = '{}/{}'.format(trainparams.dir_name,mctsstat_name)
     np.savez(mctsstats_path, scores=scores, qvals=qvals)
 
+def _dkt_test_models_mcts_qval_single(trainparams,mctsparams,r,ep):
+    print('=====================================')
+    print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+    print('=====================================')
+
+    # load model from checkpoint
+    checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+    checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+
+    # test dkt
+    qval = test_dkt_qval(
+        trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, mctsparams.horizon, mctsparams.initialq_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
+    return qval
+
 def dkt_test_models_mcts_qval(trainparams,mctsparams):
     '''
     Given a set of runs, test the checkpointed models initial state's qval using loads of MCTS rollouts
     '''
     qvals = [[] for _ in six.moves.range(trainparams.num_runs)]
     
+    flat_qvals = np.array(Parallel(n_jobs=8)(delayed(_dkt_test_models_mcts_qval_single)(trainparams,mctsparams,r,ep) for (r,ep) in itertools.product(six.moves.range(trainparams.num_runs), trainparams.saved_epochs)))
+    
+    flatix = 0
     for r in six.moves.range(trainparams.num_runs):
         for ep in trainparams.saved_epochs:
-            print('=====================================')
-            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
-            print('=====================================')
-            
-            # load model from checkpoint
-            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
-            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
-            
-            # test dkt
-            qval = test_dkt_qval(
-                trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, mctsparams.horizon, mctsparams.initialq_n_rollouts, mctsparams.r_type, chkpt=checkpoint_path)
-            
+            qval = flat_qvals[flatix]
             # update stats
             qvals[r].append(qval)
-            
+            flatix += 1
     
     # save stats
     stat_name = mctsparams.initialq_pat.format(trainparams.run_name)
@@ -1099,7 +1107,29 @@ if __name__ == '__main__':
     # first try to find stopping epoch
     #cur_train = [TrainParams('runA',10,'test2w5_modelgrusimple_mid',7,[30]), TrainParams('runA',10,'test2w5_modelgrusimple_mid',8,[30])]
     # now try testing 20 models
-    cur_train = [TrainParams('runB',20,'test2w5_modelgrusimple_mid',7,[15]), TrainParams('runB',20,'test2w5_modelgrusimple_mid',8,[15])]
+    #cur_train = [TrainParams('runB',20,'test2w5_modelgrusimple_mid',7,[15]), TrainParams('runB',20,'test2w5_modelgrusimple_mid',8,[15])]
+    # redo with binary crossentropy and slightly tuned learning rate for faster learning, and single lstm mid size model
+    # first find stopping epoch
+    #cur_train = [TrainParams('runbceA',10,'test2w5_modelsimple_mid',7,[10]), TrainParams('runbceA',10,'test2w5_modelsimple_mid',8,[10])]
+    # now try testing 20 models
+    #cur_train = [TrainParams('runbceB',20,'test2w5_modelsimple_mid',7,[6]), TrainParams('runbceB',20,'test2w5_modelsimple_mid',8,[6])]
+    
+    # try trajectory length 9 to debug binary crossentropy loss
+    # first find stopping epoch
+    #cur_train = [TrainParams('runbceA',5,'test2w5_modelsimple_mid',9,[10])]
+    # test 20 models
+    #cur_train = [TrainParams('runbceA',20,'test2w5_modelsimple_mid',9,[6])]
+    # binary cross-entropy seems to fail completely
+    
+    # go back to mean squared loss and tuned learning rate
+    # try single layer lstm
+    # first find stopping epoch
+    #cur_train = [TrainParams('runA',5,'test2w5_modelsimple_mid',8,[20]), TrainParams('runA',5,'test2w5_modelsimple_mid',7,[20])]
+    # test 20 models
+    #cur_train = [TrainParams('runB',20,'test2w5_modelsimple_mid',8,[10]), TrainParams('runB',20,'test2w5_modelsimple_mid',7,[10])]
+    # test 30 more models
+    # now we have 50 models
+    cur_train = [TrainParams('runB',20,'test2w5_modelsimple_mid',7,[10]),TrainParams('runC',30,'test2w5_modelsimple_mid',7,[10])]
     
     for ct in cur_train:
         pass
@@ -1112,13 +1142,13 @@ if __name__ == '__main__':
         '''
         def __init__(self, use_real=True):
             self.r_type = SPARSE
-            self.n_rollouts = 30000
-            self.n_trajectories = 10
+            self.n_rollouts = 20000
+            self.n_trajectories = 8
             self.use_real = use_real
             self.horizon = 8
             
             # for testing initialq values
-            self.initialq_n_rollouts = 100000
+            self.initialq_n_rollouts = 200000
             
             # for extracting a policy
             self.policy_n_rollouts = 20000
@@ -1224,8 +1254,8 @@ if __name__ == '__main__':
     tp = TestParams()
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
-        #dkt_test_models_mcts_qval(ct,tp)
+        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
         #dkt_test_models_policy(ct,tp)

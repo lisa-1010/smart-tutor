@@ -36,7 +36,7 @@ n_outputdim = 10
 
 class DynamicsModel(object):
 
-    def __init__(self, model_id, timesteps=100, dropout=0.5, load_checkpoint=False, use_sess=False):
+    def __init__(self, model_id, timesteps=1, dropout=1.0, load_checkpoint=False, use_sess=False):
         print('Loading RNN dynamics model...')
 
         # if timesteps:
@@ -102,7 +102,7 @@ class DynamicsModel(object):
 
             print('Model loaded.')
 
-    def _build_regression_lstm_net(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
+    def _build_regression_lstm_net(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=1.0):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
@@ -110,11 +110,11 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="lstm_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
-                                 loss='mean_square') # mean square works; binary crossentropy seems to work maybe
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+                                 loss='mean_square') # mean square works; binary crossentropy does not work for some reason
         return net, hidden_states_1, hidden_states_2
     
-    def _build_regression_lstm_net2(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
+    def _build_regression_lstm_net2(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=1.0):
         # don't have 2 lstms, just have a shared output layer
         # this alternative doesn't seem to work as well
@@ -124,11 +124,11 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
-                                 loss='mean_square') # mean square works; binary crossentropy seems to work maybe
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+                                 loss='mean_square') # mean square works
         return net, hidden_states_1, None
 
-    def _build_regression_lstm_net_gru(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
+    def _build_regression_lstm_net_gru(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=1.0):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
@@ -136,11 +136,11 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.gru(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="gru_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
-                                 loss='mean_square') # mean square works; binary crossentropy seems to work maybe
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+                                 loss='mean_square') # mean square works
         return net, hidden_states_1, hidden_states_2
     
-    def _build_regression_gru_net2(self, n_timesteps=10, n_inputdim=n_inputdim, n_hidden=n_hidden,
+    def _build_regression_gru_net2(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=1.0):
         # don't have 2 lstms, just have a shared output layer
         # this alternative doesn't seem to work as well
@@ -150,8 +150,8 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
-                                 loss='mean_square') # mean square works; binary crossentropy seems to work maybe
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.002,
+                                 loss='mean_square') # mean square works
         return net, hidden_states_1, None
     
     def load(self, s):
@@ -164,7 +164,7 @@ class DynamicsModel(object):
             #tf.reset_default_graph()
             self._model.save(s)
 
-    def train(self, train_data, n_epoch=64, callbacks=[], shuffle=None, load_checkpoint=True):
+    def train(self, train_data, n_epoch=1, callbacks=[], shuffle=None, load_checkpoint=True, validation_set=0.1):
         """
 
         :param train_data: tuple (input_data, output_mask, output_data)
@@ -177,7 +177,7 @@ class DynamicsModel(object):
             input_data, output_mask, output_data = train_data
             date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
             run_id = "{}".format(date_time_string)
-            self._model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=0.1, run_id=run_id, callbacks=callbacks, shuffle=shuffle)
+            self._model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=validation_set, run_id=run_id, callbacks=callbacks, shuffle=shuffle)
 
 
     def predict(self, input_data):
