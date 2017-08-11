@@ -573,7 +573,7 @@ def dkt_train_models(params):
     
     for r in six.moves.range(params.num_runs):
         # new model instantiation
-        dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen, dropout=params.dropout, load_checkpoint=False)
+        dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen-1, dropout=params.dropout, load_checkpoint=False)
         
         epochs_trained = 0
         for ep in params.saved_epochs:
@@ -1007,11 +1007,18 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runB',20,'test2w5_modelsimple_mid',8,[10]), TrainParams('runB',20,'test2w5_modelsimple_mid',7,[10])]
     # test 30 more models
     # now we have 50 models
-    cur_train = [TrainParams('runB',20,'test2w5_modelsimple_mid',7,[10]),TrainParams('runC',30,'test2w5_modelsimple_mid',7,[10])]
+    #cur_train = [TrainParams('runB',20,'test2w5_modelsimple_mid',7,[10]),TrainParams('runC',30,'test2w5_modelsimple_mid',7,[10])]
+    
+    # try small size singer layer gru
+    # try 20 models, with 50 training epochs
+    # 50 seems to work alright with learning rate 0.0005 and grusimple
+    #cur_train = [TrainParams('runA',20,'test2w5_modelgrusimple_small',7,[50])]
+    # train 30 more models
+    cur_train = [TrainParams('runB',30,'test2w5_modelgrusimple_small',7,[50])]
     
     for ct in cur_train:
         pass
-        #dkt_train_models(ct)
+        dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1133,7 +1140,7 @@ if __name__ == '__main__':
     for ct in cur_train:
         pass
         #dkt_test_models_mcts(ct,tp)
-        dkt_test_models_mcts_qval(ct,tp)
+        #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
         #dkt_test_models_policy(ct,tp)

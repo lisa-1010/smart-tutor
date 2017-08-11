@@ -110,7 +110,7 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="lstm_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
                                  loss='mean_square') # mean square works; binary crossentropy does not work for some reason
         return net, hidden_states_1, hidden_states_2
     
@@ -124,7 +124,7 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, None
 
@@ -136,7 +136,7 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.gru(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="gru_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, hidden_states_2
     
@@ -150,7 +150,7 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.003,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, None
     
@@ -164,7 +164,7 @@ class DynamicsModel(object):
             #tf.reset_default_graph()
             self._model.save(s)
 
-    def train(self, train_data, n_epoch=1, callbacks=[], shuffle=None, load_checkpoint=True, validation_set=0.1):
+    def train(self, train_data, n_epoch=1, callbacks=[], shuffle=None, load_checkpoint=True, validation_set=0.1, batch_size=None):
         """
 
         :param train_data: tuple (input_data, output_mask, output_data)
@@ -177,7 +177,7 @@ class DynamicsModel(object):
             input_data, output_mask, output_data = train_data
             date_time_string = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
             run_id = "{}".format(date_time_string)
-            self._model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=validation_set, run_id=run_id, callbacks=callbacks, shuffle=shuffle)
+            self._model.fit([input_data, output_mask], output_data, n_epoch=n_epoch, validation_set=validation_set, run_id=run_id, callbacks=callbacks, shuffle=shuffle, batch_size=batch_size)
 
 
     def predict(self, input_data):
