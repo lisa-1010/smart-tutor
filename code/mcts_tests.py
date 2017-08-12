@@ -548,30 +548,25 @@ def dkt_test_mcts_proper_rme(model_id, n_rollouts, n_trajectories, r_type, envs,
     return rewards
     
 
-def dkt_train_models(params):
+def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
     '''
-    Trains a bunch of random restarts of models, checkpointed at various times
+    Loads data and trains a batch of models.
+    A batch is a continguous sequence of runs
     '''
     
-    # first try to create the checkpoint directory if it doesn't exist
-    try:
-        os.makedirs(params.dir_name)
-    except:
-        # do nothing if already exists
-        pass
+    #six.print_('startix {} nruns {}'.format(runstartix,chunk_num_runs))
     
-    # total number of epochs to train for, should be passed in as the last epoch to be saved
-    total_epochs = params.saved_epochs[-1]
-    
-    train_losses = [[] for _ in six.moves.range(params.num_runs)]
-    val_losses = [[] for _ in six.moves.range(params.num_runs)]
+    train_losses = [[] for _ in six.moves.range(chunk_num_runs)]
+    val_losses = [[] for _ in six.moves.range(chunk_num_runs)]
     
     #load data
     data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
     input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
     train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
     
-    for r in six.moves.range(params.num_runs):
+    for offset in six.moves.range(chunk_num_runs):
+        r = runstartix + offset
+        
         # new model instantiation
         dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen-1, dropout=params.dropout, load_checkpoint=False)
         
@@ -595,11 +590,39 @@ def dkt_train_models(params):
             dkt_model.save(checkpoint_path)
             
             # update stats
-            train_losses[r].extend([c.global_loss for c in ecall.tstates])
-            val_losses[r].extend([c.val_loss for c in ecall.tstates])
+            train_losses[offset].extend([c.global_loss for c in ecall.tstates])
+            val_losses[offset].extend([c.val_loss for c in ecall.tstates])
             
             # update epochs_trained
             epochs_trained = ep+1
+    return (train_losses, val_losses)
+
+def dkt_train_models(params):
+    '''
+    Trains a bunch of random restarts of models, checkpointed at various times
+    '''
+    
+    # first try to create the checkpoint directory if it doesn't exist
+    try:
+        os.makedirs(params.dir_name)
+    except:
+        # do nothing if already exists
+        pass
+    
+    train_losses = []
+    val_losses = []
+    
+    n_jobs = min(5, params.num_runs)
+    # need to be a multiple of number of jobs so I don't have to deal with uneven leftovers
+    assert(params.num_runs % n_jobs == 0)
+    runs_per_job = int(params.num_runs / n_jobs)
+    
+    losses = list(Parallel(n_jobs=n_jobs)(delayed(_dkt_train_models_chunk)(params,startix,runs_per_job) for startix in six.moves.range(0,params.num_runs,runs_per_job)))
+    
+    for tloss, vloss in losses:
+        train_losses.extend(tloss)
+        val_losses.extend(vloss)
+    #six.print_((train_losses,val_losses))
     
     # save stats
     stats_path = '{}/{}'.format(params.dir_name,params.stat_name)
@@ -1000,6 +1023,7 @@ if __name__ == '__main__':
     # binary cross-entropy seems to fail completely
     
     # go back to mean squared loss and tuned learning rate
+    # OUTDATED
     # try single layer lstm
     # first find stopping epoch
     #cur_train = [TrainParams('runA',5,'test2w5_modelsimple_mid',8,[20]), TrainParams('runA',5,'test2w5_modelsimple_mid',7,[20])]
@@ -1014,7 +1038,12 @@ if __name__ == '__main__':
     # 50 seems to work alright with learning rate 0.0005 and grusimple
     #cur_train = [TrainParams('runA',20,'test2w5_modelgrusimple_small',7,[50])]
     # train 30 more models
-    cur_train = [TrainParams('runB',30,'test2w5_modelgrusimple_small',7,[50])]
+    #cur_train = [TrainParams('runA',20,'test2w5_modelgrusimple_small',7,[50]),TrainParams('runB',30,'test2w5_modelgrusimple_small',7,[50])]
+    
+    # go back to mean squared loss and tuned learning rate of 0.01
+    # everything needs like 40 epochs to train, so directly go training
+    # use gru simple and do dropout and without
+    cur_train = [TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40]), TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40],dropout=0.8)]
     
     for ct in cur_train:
         pass

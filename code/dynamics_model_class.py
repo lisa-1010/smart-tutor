@@ -88,7 +88,7 @@ class DynamicsModel(object):
             utils.check_if_path_exists_or_create(tensorboard_dir)
             utils.check_if_path_exists_or_create(checkpoint_dir)
 
-            self._model = tflearn.DNN(self.net, tensorboard_verbose=2, tensorboard_dir=tensorboard_dir, \
+            self._model = tflearn.DNN(self.net, tensorboard_verbose=0, tensorboard_dir=tensorboard_dir, \
                                     checkpoint_path=checkpoint_path, max_checkpoints=3)
 
             if load_checkpoint:
@@ -110,7 +110,7 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="lstm_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.01,
                                  loss='mean_square') # mean square works; binary crossentropy does not work for some reason
         return net, hidden_states_1, hidden_states_2
     
@@ -124,7 +124,7 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.01,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, None
 
@@ -136,7 +136,7 @@ class DynamicsModel(object):
         net, hidden_states_2 = tflearn.gru(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="gru_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.01,
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, hidden_states_2
     
@@ -150,8 +150,8 @@ class DynamicsModel(object):
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
-        net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
-                                 loss='mean_square') # mean square works
+        net = tflearn.regression(net, optimizer='adam', learning_rate=0.01,
+                                 loss='mean_square') # mean square works, learning rate 0.001 seems to work but is unstable near the beginning, and 0.0001 is too slow, 0.01 also works like 0.001 (i.e. unstable in the beginning)
         return net, hidden_states_1, None
     
     def load(self, s):
