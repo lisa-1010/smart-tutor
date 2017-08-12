@@ -998,56 +998,20 @@ if __name__ == '__main__':
     # try 50 with simple gru
     #cur_train = [TrainParams('runB',50,'test2_modelgrusimple_mid',[9])]
     
-    # student2a 5 skills with training trajectory length 6, random
-    # first try to find stopping epoch
-    #cur_train = [TrainParams('runA',10,'test2w5_modelgrusimple_mid',[40])]
-    # first try testing 20 models
-    #cur_train = [TrainParams('runB',20,'test2w5_modelgrusimple_mid',[28])]
-    
-    # student2a 5 skills with training trajectory length 7 and 8, random
-    # first try to find stopping epoch
-    #cur_train = [TrainParams('runA',10,'test2w5_modelgrusimple_mid',7,[30]), TrainParams('runA',10,'test2w5_modelgrusimple_mid',8,[30])]
-    # now try testing 20 models
-    #cur_train = [TrainParams('runB',20,'test2w5_modelgrusimple_mid',7,[15]), TrainParams('runB',20,'test2w5_modelgrusimple_mid',8,[15])]
-    # redo with binary crossentropy and slightly tuned learning rate for faster learning, and single lstm mid size model
-    # first find stopping epoch
-    #cur_train = [TrainParams('runbceA',10,'test2w5_modelsimple_mid',7,[10]), TrainParams('runbceA',10,'test2w5_modelsimple_mid',8,[10])]
-    # now try testing 20 models
-    #cur_train = [TrainParams('runbceB',20,'test2w5_modelsimple_mid',7,[6]), TrainParams('runbceB',20,'test2w5_modelsimple_mid',8,[6])]
-    
-    # try trajectory length 9 to debug binary crossentropy loss
-    # first find stopping epoch
-    #cur_train = [TrainParams('runbceA',5,'test2w5_modelsimple_mid',9,[10])]
-    # test 20 models
-    #cur_train = [TrainParams('runbceA',20,'test2w5_modelsimple_mid',9,[6])]
-    # binary cross-entropy seems to fail completely
-    
-    # go back to mean squared loss and tuned learning rate
-    # OUTDATED
-    # try single layer lstm
-    # first find stopping epoch
-    #cur_train = [TrainParams('runA',5,'test2w5_modelsimple_mid',8,[20]), TrainParams('runA',5,'test2w5_modelsimple_mid',7,[20])]
-    # test 20 models
-    #cur_train = [TrainParams('runB',20,'test2w5_modelsimple_mid',8,[10]), TrainParams('runB',20,'test2w5_modelsimple_mid',7,[10])]
-    # test 30 more models
-    # now we have 50 models
-    #cur_train = [TrainParams('runB',20,'test2w5_modelsimple_mid',7,[10]),TrainParams('runC',30,'test2w5_modelsimple_mid',7,[10])]
-    
-    # try small size singer layer gru
-    # try 20 models, with 50 training epochs
-    # 50 seems to work alright with learning rate 0.0005 and grusimple
-    #cur_train = [TrainParams('runA',20,'test2w5_modelgrusimple_small',7,[50])]
-    # train 30 more models
-    #cur_train = [TrainParams('runA',20,'test2w5_modelgrusimple_small',7,[50]),TrainParams('runB',30,'test2w5_modelgrusimple_small',7,[50])]
-    
+    # student2a 5 skills with training trajectory, random
     # go back to mean squared loss and tuned learning rate of 0.01
     # everything needs like 40 epochs to train, so directly go training
     # use gru simple and do dropout and without
-    cur_train = [TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40]), TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40],dropout=0.8)]
+    # dropout seems to suck though
+    #cur_train = [TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40],dropout=0.8)]
+    # length 7
+    #cur_train = [TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40]), TrainParams('runlr01B',30,'test2w5_modelgrusimple_mid',7,[40])]
+    # length 6
+    cur_train = [TrainParams('runlr01A',30,'test2w5_modelgrusimple_mid',6,[50]),TrainParams('runlr01B',20,'test2w5_modelgrusimple_mid',6,[50])]
     
     for ct in cur_train:
         pass
-        dkt_train_models(ct)
+        #dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1165,10 +1129,10 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams()
+    tp = TestParams(use_real=False)
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)

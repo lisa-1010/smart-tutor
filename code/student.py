@@ -25,10 +25,10 @@ from __future__ import absolute_import, division, print_function
 # Python libraries
 import numpy as np
 from collections import defaultdict, deque, Counter
+import six
 
 # Custom Modules
 from constants import *
-import exercise as exer
 
 import dynamics_model_class as dmc
 
@@ -70,17 +70,17 @@ class Student(object):
     def do_exercise(self, concept_tree, ex):
         '''
         Simulates solving the provided exercise.
-        :param ex: an Exercise object.
+        :param ex: a StudentAction object.
         :return: Returns 1 if student solved it correctly, 0 otherwise.
         '''
         # if self._fulfilled_prereqs(ex.concepts):
-        if self.fulfilled_prereqs(concept_tree, ex.concepts):
+        if self.fulfilled_prereqs(concept_tree, ex.conceptvec):
             # print("P trans satisfied_{}".format(self.p_trans_satisfied))
-            for c in xrange(len(ex.concepts)):
-                if ex.concepts[c] == 1 and np.random.random() <= self.p_trans_satisfied:
+            for c in xrange(len(ex.conceptvec)):
+                if ex.conceptvec[c] == 1 and np.random.random() <= self.p_trans_satisfied:
                     # update latent knowledge state
                     self.knowledge[c] = 1
-            if self.learned_all_concepts_in_ex(ex.concepts) and np.random.random() <= self.p_get_ex_correct_if_concepts_learned:
+            if self.learned_all_concepts_in_ex(ex.conceptvec) and np.random.random() <= self.p_get_ex_correct_if_concepts_learned:
                 return 1
             else:
                 return 0
@@ -123,12 +123,12 @@ class Student2(object):
     '''
     def __init__(self, n_concepts, transition_after):
         self.knowledge = np.zeros((n_concepts,))
-        self.visited = np.zeros((n_concepts,)).astype(np.int)
+        self.visited = np.zeros((n_concepts,),dtype=np.int)
         self.transition_after = transition_after
 
     def reset(self):
         self.knowledge = np.zeros(self.knowledge.shape)
-        self.visited = np.zeros(self.knowledge.shape).astype(np.int)
+        self.visited = np.zeros(self.knowledge.shape,dtype=np.int)
 
     def copy(self):
         '''
@@ -146,61 +146,55 @@ class Student2(object):
         '''
         return np.concatenate((self.knowledge, self.visited)).astype(np.int)
     
-    def update_knowledge(self, concept_tree, ex):
+    def update_knowledge(self, concept_tree, c):
         '''
         Half of an update. This updates the student's knowledge.
         This can be called before, or after the observation.
         '''
-        if self.fulfilled_prereqs(concept_tree, ex.concepts):
-            for c in xrange(len(ex.concepts)):
-                if ex.concepts[c] == 1:
-                    # has been visited before?
-                    if self.visited[c] >= 1:
-                        # if yes, then this is second time visited so yes mastery
-                        self.knowledge[c] = 1
-                    # concept has been visited
-                    self.visited[c] = 1
+        if self.fulfilled_prereqs(concept_tree, c):
+            if self.visited[c] >= 1:
+                # if yes, then this is second time visited so yes mastery
+                self.knowledge[c] = 1
+            # concept has been visited
+            self.visited[c] = 1
     
-    def try_exercise(self, concept_tree, ex):
+    def try_exercise(self, concept_tree, concept):
         '''
         Get an observation of whether the student gets the question correct without updating the knowledge.
         '''
-        return self.learned_all_concepts_in_ex(ex.concepts)
+        return self.knowledge[concept] > 0.99
     
     def do_exercise(self, concept_tree, ex):
         '''
         Simulates solving the provided exercise.
-        :param ex: an Exercise object.
+        :param ex: a StudentAction object.
         :return: Returns 1 if student solved it correctly, 0 otherwise.
         '''
         if not self.transition_after:
-            self.update_knowledge(concept_tree, ex)
-            ob = self.try_exercise(concept_tree, ex)
+            self.update_knowledge(concept_tree, ex.concept)
+            ob = self.try_exercise(concept_tree, ex.concept)
         else:
-            ob = self.try_exercise(concept_tree, ex)
-            self.update_knowledge(concept_tree, ex)
+            ob = self.try_exercise(concept_tree, ex.concept)
+            self.update_knowledge(concept_tree, ex.concept)
+        #six.print_((ob, ex))
         return ob
 
 
-    def fulfilled_prereqs(self, concept_tree, concepts):
+    def fulfilled_prereqs(self, concept_tree, c):
         '''
         for each concept tested in the exercise, check if all prereqs are fulfilled.
         if prereqs for at least one concept are not fulfilled, then function returns False.
         :return: bool
         '''
-        for i in xrange(len(concepts)):
-            c = concepts[i]
-            if c == 1:
-                prereqs = concept_tree.get_prereqs(i)
-                if np.sum(np.multiply(self.knowledge, prereqs)) != np.sum(prereqs):
-                    return False
-        return True
+        prereqs = concept_tree.get_prereqs(c)
+        return np.all(self.knowledge >= prereqs)
+        #return np.sum(np.multiply(self.knowledge, prereqs)) == np.sum(prereqs)
 
-    def learned_all_concepts_in_ex(self, concepts):
-        for c in xrange(len(concepts)):
-            if concepts[c] == 1 and self.knowledge[c] == 0:
-                return False
-        return True
+    def _learned_all_concepts_in_ex(self, concepts):
+        '''
+        DEPRECATED
+        '''
+        return np.sum(self.knowledge * concepts) + 0.2 > np.sum(concepts)
 
     # END OF class Student2
 
@@ -222,7 +216,7 @@ class StudentExactSim(object):
         '''
         # for now, the reward is a full posttest
         reward = np.sum(self.student.knowledge)
-        ob = self.student.do_exercise(self.dgraph, exer.Exercise(action.conceptvec))
+        ob = self.student.do_exercise(self.dgraph, action)
         return (ob, reward)
     
     def get_knowledge(self):

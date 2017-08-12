@@ -15,6 +15,7 @@ from __future__ import absolute_import, division, print_function
 
 # Python libraries
 import numpy as np
+import six
 from collections import defaultdict, deque, Counter
 
 # Custom Modules
@@ -57,6 +58,10 @@ class ConceptDependencyGraph(object):
                 self.children[i].append(2 * i + 2)
                 self.parents[2 * i + 2].append(i)
         self._create_prereq_map()
+        # cache the prerequisites
+        self.prereqs = []
+        for s in six.moves.range(n):
+            self.prereqs.append(self._compute_prereqs(s))
 
 
     def _create_prereq_map(self):
@@ -77,10 +82,12 @@ class ConceptDependencyGraph(object):
 
         for p in parents:
             self.prereq_map[cur] = self.prereq_map[cur].union(self.prereq_map[p])
-
-
-    def get_prereqs(self, concept):
-        prereqs = np.zeros((self.n,))
+    
+    def _compute_prereqs(self, concept):
+        prereqs = np.zeros((self.n,),dtype=np.int)
         for p in self.prereq_map[concept]:
             prereqs[p] = 1
         return prereqs
+
+    def get_prereqs(self, concept):
+        return self.prereqs[concept]

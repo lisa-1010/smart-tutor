@@ -36,7 +36,6 @@ from constants import *
 import dataset_utils
 import concept_dependency_graph as cdg
 import student as st
-import exercise as exer
 
 
 def fulfilled_prereqs(concept_tree, knowledge, concepts):
@@ -58,6 +57,7 @@ def sample_expert_action(concept_tree, knowledge):
     '''
     Samples an optimal action given the current knowledge and the concept tree.
     Samples uniformly from all optimal actions.
+    Returns a StudentAction
     '''
     next_concepts = []
     
@@ -77,7 +77,7 @@ def sample_expert_action(concept_tree, knowledge):
         next_action = np.random.choice(next_concepts)
     next_c = np.zeros((concept_tree.n,),dtype=np.int)
     next_c[next_action] = 1
-    return next_c
+    return st.StudentAction(next_action, next_c)
 
 def egreedy_expert(concept_tree, knowledge, epsilon):
     '''
@@ -88,18 +88,16 @@ def egreedy_expert(concept_tree, knowledge, epsilon):
         next_action = np.random.randint(0,concept_tree.n)
         next_c = np.zeros((concept_tree.n,),dtype=np.int)
         next_c[next_action] = 1
+        next_act = st.StudentAction(next_action,next_c)
     else:
-        next_c = sample_expert_action(concept_tree, knowledge)
-    return next_c
+        next_act = sample_expert_action(concept_tree, knowledge)
+    return next_act
 
-def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq=None, initial_knowledge=None, policy=None, epsilon=None, verbose=False):
+def generate_student_sample(concept_tree, seqlen=100, student=None, initial_knowledge=None, policy=None, epsilon=None, verbose=False):
     '''
     :param n: number of concepts; if None use N_CONCEPTS
     :param concept_tree: Concept dependency graph
     :param seqlen: number of exercises the student will do.
-    :param exercise_seq: Sequence of exercises. list of exercise objects.
-        If None, this function will generate the default sequence [0 .. seqlen - 1]
-        if exercise_seq provided, policy arg will be disregarded.
     :param initial_knowledge: initial knowledge of student. If None, will be set to 0 for all concepts.
     :param policy: if no exercise_seq provided, use the specified policy to generate exercise sequence.
     :param epsilon: epsilon for egreedy policy
@@ -122,18 +120,20 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
     # if not exercise_seq and policy == 'expert':
     #     return _generate_student_sample_with_expert_policy(student=s, seqlen=seqlen, verbose=verbose)
 
-    if not exercise_seq and (policy == 'modulo' or policy == 'random'):
+    if (policy == 'modulo' or policy == 'random'):
         # for expert policy, we have to choose the next exercise online.
         exercise_seq = []
         for i in xrange(seqlen):
-            concepts = np.zeros((n_concepts,))
+            concepts = np.zeros((n_concepts,),dtype=np.int)
             if policy == 'modulo':
                 # choose exercise with modulo op. This imposes an ordering on exercises.
-                concepts[i % n_concepts] = 1
+                conceptix = i % n_concepts
+                concepts[conceptix] = 1
             elif policy == 'random':
                 # choose one random concept for this exercise
-                concepts[np.random.randint(n_concepts)] = 1
-            ex = exer.Exercise(concepts=concepts)
+                conceptix = np.random.randint(n_concepts)
+                concepts[conceptix] = 1
+            ex = st.StudentAction(conceptix, concepts)
             exercise_seq.append(ex)
 
     # Go through sequence of exercises and record whether student solved each or not
@@ -147,15 +147,13 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
         # store current states
         student_state.append(s.get_state())
         if policy == 'expert':
-            concepts = sample_expert_action(concept_tree, s.knowledge)
-            ex = exer.Exercise(concepts=concepts)
+            ex = sample_expert_action(concept_tree, s.knowledge)
         elif policy == 'egreedy':
-            concepts = egreedy_expert(concept_tree, s.knowledge, epsilon)
-            ex = exer.Exercise(concepts=concepts)
+            ex = egreedy_expert(concept_tree, s.knowledge, epsilon)
         else:
             ex = exercise_seq[i]
         result = s.do_exercise(concept_tree, ex)
-        exercises.append(ex.concepts) # makes the assumption that an exercise is equivalent to the concepts it practices)
+        exercises.append(ex.conceptvec) # makes the assumption that an exercise is equivalent to the concepts it practices)
         student_performance.append(result)
         student_knowledge.append(copy.deepcopy(s.knowledge))
         if np.sum(s.knowledge) == n_concepts and n_exercises_to_mastery == -1:
@@ -166,8 +164,9 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, exercise_seq
             print ("learned all concepts after {} exercises.".format(n_exercises_to_mastery))
         else:
             print ("Did not learn all concepts after doing {} exercises.".format(seqlen))
-    # print (student_knowledge)
+    #six.print_(student_performance)
     student_sample = zip(exercises, student_performance, student_knowledge, student_state)
+    #six.print_(student_sample)
     return student_sample
 
 
@@ -191,7 +190,7 @@ def generate_data(concept_tree, student=None, filter_mastery=False, n_students=1
     for i in xrange(n_students):
         if verbose:
             print ("Creating sample for {}th student".format(i))
-        student_sample = generate_student_sample(concept_tree, student=student, seqlen=seqlen, exercise_seq=None, initial_knowledge=None,
+        student_sample = generate_student_sample(concept_tree, student=student, seqlen=seqlen, initial_knowledge=None,
                                                  policy=policy, epsilon=epsilon, verbose=verbose)
         if filter_mastery:
             final_knowledge = student_sample[-1][2]

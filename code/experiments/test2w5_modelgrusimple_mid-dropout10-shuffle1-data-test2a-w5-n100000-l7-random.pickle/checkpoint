@@ -1,4 +1,4 @@
-model_checkpoint_path: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2w5_modelgrusimple_mid-dropout10-shuffle1-data-test2a-w5-n100000-l7-random.pickle/checkpoint-runB19-epoch15"
-all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2w5_modelgrusimple_mid/_-21105"
-all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2w5_modelgrusimple_mid/_-22512"
-all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2w5_modelgrusimple_mid-dropout10-shuffle1-data-test2a-w5-n100000-l7-random.pickle/checkpoint-runB19-epoch15"
+model_checkpoint_path: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2w5_modelgrusimple_mid-dropout10-shuffle1-data-test2a-w5-n100000-l7-random.pickle/checkpoint-runlr01B29-epoch40"
+all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2w5_modelgrusimple_mid/_-56280"
+all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2w5_modelgrusimple_mid/_-57687"
+all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2w5_modelgrusimple_mid-dropout10-shuffle1-data-test2a-w5-n100000-l7-random.pickle/checkpoint-runlr01B29-epoch40"

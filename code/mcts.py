@@ -11,8 +11,6 @@
 import numpy as np
 import scipy as sp
 
-import exercise as exer
-
 from mctslib.graph import *
 from mctslib.mcts import *
 
