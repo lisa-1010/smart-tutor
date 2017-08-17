@@ -1230,7 +1230,7 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams(use_real=True)
+    tp = TestParams(use_real=False)
     for ct in cur_train:
         pass
         dkt_test_models_mcts(ct,tp)
