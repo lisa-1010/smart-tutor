@@ -1142,10 +1142,7 @@ if __name__ == '__main__':
     # doesn't seem to work as well
     
     # add gaussian noise 0.1 to input and mid size models
-    #cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
-    
-    # debugging
-    cur_train = [TrainParams('runlr01A',10,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
+    cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
     
     for ct in cur_train:
         pass
@@ -1170,7 +1167,7 @@ if __name__ == '__main__':
             self.policy_n_rollouts = 20000
             
             # for multistep error
-            self.mserror_file = 'test2a-w5-n10000-l7-random.pickle'
+            self.mserror_file = 'test2a-w5-n100000-l7-random.pickle'
             
             # for rme
             self.rme_n_rollouts = 1000
