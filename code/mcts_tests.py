@@ -437,13 +437,23 @@ def test_dkt_multistep(model_id, dataset, chkpt=None):
     Test DKT multistep error on dataset. Dataset is output from generate_data.
     '''
     import concept_dependency_graph as cdg
-
+    
+    n_concepts = dataset[0][0][0].shape[0]
+    horizon = len(dataset[0])
+    
+    # debug
+    #six.print_('n concepts {} horizon {} trajectory {}'.format(n_concepts, horizon, dataset[0]))
+    
     dgraph = cdg.ConceptDependencyGraph()
     dgraph.init_default_tree(n_concepts)
 
-    #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
-    student2 = st.Student2(n_concepts, transition_after)
+    # create the model and simulators
+    student2 = st.Student2(n_concepts, True)
     test_student = student2
+    stu = test_student.copy()
+    stu.reset()
+    stu.knowledge[0] = 1 # initialize the first concept to be known
+    sim = st.StudentExactSim(stu, dgraph)
     
     # load the model
     if chkpt is not None:
@@ -459,14 +469,38 @@ def test_dkt_multistep(model_id, dataset, chkpt=None):
     # make the model
     dktmodel = dmc.RnnStudentSim(model)
     
+    # accumulate error
+    mse_acc = 0.0
     for i in six.moves.range(len(dataset)):
+        curr_mse = 0.0
         curr_traj = dataset[i]
-        horizon = len(curr_traj)
-        # extract action sequence up to and not including the final and run the model to the end
-        open_policy = [t[0] for t in curr_traj[:-1]]
-        startstate = DKTState(dktmodel, sim, 1, horizon, r_type, dktcache, False)
-
-    return ms_error
+        curr_state = DKTState(dktmodel, sim, 1, horizon, SPARSE, dktcache, False)
+        for t in six.moves.range(horizon-1):
+            # advance the DKT, then compare prediction with the data, up to the last prediction
+            curr_conceptvec = curr_traj[t][0]
+            curr_concept = np.nonzero(curr_conceptvec)[0]
+            curr_ob = int(curr_traj[t][1])
+            
+            next_conceptvec = curr_traj[t+1][0]
+            next_concept = np.nonzero(next_conceptvec)[0]
+            next_ob = int(curr_traj[t+1][1])
+            
+            # advance the DKT
+            curr_state = curr_state.perform(st.StudentAction(curr_concept,curr_conceptvec))
+            next_probs = curr_state.get_probs()
+            
+            # compute and accumulate the mse
+            diff = next_probs[next_concept] - next_ob
+            curr_mse += diff * diff
+            
+            #debugging
+            #six.print_('traj {} step {} actvec {} act {} ob {} next probs {} diff {}'.format(i,t,curr_conceptvec,curr_concept,curr_ob,next_probs,diff))
+        # average mse per step
+        mse_acc += curr_mse / (horizon - 1)
+        
+        #six.print_('mse per step acc {}'.format(mse_acc))
+    # return the average MSE per step in a trajectory
+    return mse_acc / len(dataset)
 
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
@@ -743,7 +777,7 @@ def _dkt_test_models_multistep_chunk(trainparams,mctsparams,runstartix,chunk_num
     ms_losses = [[] for _ in six.moves.range(chunk_num_runs)]
     
     #load data
-    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
+    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, mctsparams.mserror_file))
     
     for offset in six.moves.range(chunk_num_runs):
         r = runstartix + offset
@@ -758,7 +792,9 @@ def _dkt_test_models_multistep_chunk(trainparams,mctsparams,runstartix,chunk_num
             
             # compute the multistep on the training data
             curr_loss = test_dkt_multistep(trainparams.model_id, data, chkpt=checkpoint_path)
-            ms_losses[r].append(curr_loss)
+            ms_losses[offset].append(curr_loss)
+            
+            six.print_(curr_loss)
     
     
     return ms_losses
@@ -769,14 +805,14 @@ def dkt_test_models_multistep(trainparams,mctsparams):
     Given a set of runs, test the checkpointed models multistep error on the data set
     Will use mean squared error.
     '''
-    ms_losses = [[] for _ in six.moves.range(trainparams.num_runs)]
+    ms_losses = []
     
-    n_jobs = min(5, params.num_runs)
+    n_jobs = min(5, trainparams.num_runs)
     # need to be a multiple of number of jobs so I don't have to deal with uneven leftovers
-    assert(params.num_runs % n_jobs == 0)
-    runs_per_job = int(params.num_runs / n_jobs)
+    assert(trainparams.num_runs % n_jobs == 0)
+    runs_per_job = int(trainparams.num_runs / n_jobs)
     
-    losses = list(Parallel(n_jobs=n_jobs)(delayed(_dkt_test_models_multistep_chunk)(params,startix,runs_per_job) for startix in six.moves.range(0,params.num_runs,runs_per_job)))
+    losses = list(Parallel(n_jobs=n_jobs)(delayed(_dkt_test_models_multistep_chunk)(trainparams,mctsparams,startix,runs_per_job) for startix in six.moves.range(0,trainparams.num_runs,runs_per_job)))
     
     for loss in losses:
         ms_losses.extend(loss)
@@ -1106,7 +1142,10 @@ if __name__ == '__main__':
     # doesn't seem to work as well
     
     # add gaussian noise 0.1 to input and mid size models
-    cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
+    #cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
+    
+    # debugging
+    cur_train = [TrainParams('runlr01A',10,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
     
     for ct in cur_train:
         pass
@@ -1130,6 +1169,9 @@ if __name__ == '__main__':
             # for extracting a policy
             self.policy_n_rollouts = 20000
             
+            # for multistep error
+            self.mserror_file = 'test2a-w5-n10000-l7-random.pickle'
+            
             # for rme
             self.rme_n_rollouts = 1000
             self.rme_n_trajectories = 100
@@ -1139,7 +1181,7 @@ if __name__ == '__main__':
             self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
                 self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
             # multistep error stat filename pattern
-            self.ms_pat = 'msloss-{{}}'
+            self.ms_pat = 'msloss-{}'
             # stat filename for policy testing
             self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
                 self.r_type, self.n_trajectories)
@@ -1230,11 +1272,12 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams(use_real=False)
+    tp = TestParams(use_real=True)
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
+        dkt_test_models_multistep(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
         #dkt_test_models_policy(ct,tp)
