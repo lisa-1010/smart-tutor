@@ -432,6 +432,42 @@ def test_dkt_extract_policy(model_id, n_concepts, transition_after, horizon, n_r
 
     return optpolicy, qfunc
 
+def test_dkt_multistep(model_id, dataset, chkpt=None):
+    '''
+    Test DKT multistep error on dataset. Dataset is output from generate_data.
+    '''
+    import concept_dependency_graph as cdg
+
+    dgraph = cdg.ConceptDependencyGraph()
+    dgraph.init_default_tree(n_concepts)
+
+    #student = st.Student(n=n_concepts,p_trans_satisfied=learn_prob, p_trans_not_satisfied=0.0, p_get_ex_correct_if_concepts_learned=1.0)
+    student2 = st.Student2(n_concepts, transition_after)
+    test_student = student2
+    
+    # load the model
+    if chkpt is not None:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=False)
+        model.load(chkpt)
+    else:
+        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon, load_checkpoint=True)
+    # initialize the dktcache to speed up DKT queries
+    dktcache = dict()
+
+    print('Testing model multstep: {}'.format(model_id))
+
+    # make the model
+    dktmodel = dmc.RnnStudentSim(model)
+    
+    for i in six.moves.range(len(dataset)):
+        curr_traj = dataset[i]
+        horizon = len(curr_traj)
+        # extract action sequence up to and not including the final and run the model to the end
+        open_policy = [t[0] for t in curr_traj[:-1]]
+        startstate = DKTState(dktmodel, sim, 1, horizon, r_type, dktcache, False)
+
+    return ms_error
+
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
     Used to get the training/validation losses after model.fit.
@@ -562,7 +598,8 @@ def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
     #load data
     data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
     input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
-    train_data = (input_data_[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
+    processed_input_data = input_data_ + (params.noise * np.random.randn(*input_data_.shape))
+    train_data = (processed_input_data[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
     
     for offset in six.moves.range(chunk_num_runs):
         r = runstartix + offset
@@ -697,6 +734,57 @@ def dkt_test_models_mcts_qval(trainparams,mctsparams):
     stat_name = mctsparams.initialq_pat.format(trainparams.run_name)
     mctsstats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
     np.savez(mctsstats_path, qvals=qvals)
+
+def _dkt_test_models_multistep_chunk(trainparams,mctsparams,runstartix,chunk_num_runs):
+    '''
+    Evaluate multistep error for the chunk of models.
+    '''
+    
+    ms_losses = [[] for _ in six.moves.range(chunk_num_runs)]
+    
+    #load data
+    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
+    
+    for offset in six.moves.range(chunk_num_runs):
+        r = runstartix + offset
+        for ep in trainparams.saved_epochs:
+            print('=====================================')
+            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+            print('=====================================')
+
+            # load model from checkpoint
+            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            
+            # compute the multistep on the training data
+            curr_loss = test_dkt_multistep(trainparams.model_id, data, chkpt=checkpoint_path)
+            ms_losses[r].append(curr_loss)
+    
+    
+    return ms_losses
+
+
+def dkt_test_models_multistep(trainparams,mctsparams):
+    '''
+    Given a set of runs, test the checkpointed models multistep error on the data set
+    Will use mean squared error.
+    '''
+    ms_losses = [[] for _ in six.moves.range(trainparams.num_runs)]
+    
+    n_jobs = min(5, params.num_runs)
+    # need to be a multiple of number of jobs so I don't have to deal with uneven leftovers
+    assert(params.num_runs % n_jobs == 0)
+    runs_per_job = int(params.num_runs / n_jobs)
+    
+    losses = list(Parallel(n_jobs=n_jobs)(delayed(_dkt_test_models_multistep_chunk)(params,startix,runs_per_job) for startix in six.moves.range(0,params.num_runs,runs_per_job)))
+    
+    for loss in losses:
+        ms_losses.extend(loss)
+    
+    # save stats
+    stat_name = mctsparams.ms_pat.format(trainparams.run_name)
+    mctsstats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
+    np.savez(mctsstats_path, msloss=ms_losses)
 
 def dkt_test_models_extract_policy(trainparams,mctsparams):
     '''
@@ -836,12 +924,14 @@ if __name__ == '__main__':
         '''
         Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
         '''
-        def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0):
+        def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0,noise=0.0):
             self.model_id = model_id
             self.n_concepts = 5
             self.transition_after = True
             self.dropout = dropout
             self.shuffle = True
+            # variance of gaussian noise added to the input
+            self.noise = noise
             self.seqlen = seqlen
             self.datafile = 'test2a-w{}-n100000-l{}-random.pickle'.format(self.n_concepts, self.seqlen)
             # which epochs (zero-based) to save, the last saved epoch is the total epoch
@@ -853,8 +943,9 @@ if __name__ == '__main__':
 
             # these names are derived from above and should not be touched generally
             # folder to put the checkpoints into
-            self.dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(
-                self.model_id,int(self.dropout*10),int(self.shuffle),self.datafile)
+            noise_str = '-noise{:.2f}'.format(self.noise) if self.noise > 0.0 else ''
+            self.dir_name = 'experiments/{}{}-dropout{}-shuffle{}-data-{}'.format(
+                self.model_id,noise_str,int(self.dropout*10),int(self.shuffle),self.datafile)
             # pattern for the checkpoints
             self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
             # stat file
@@ -1007,7 +1098,15 @@ if __name__ == '__main__':
     # length 7
     #cur_train = [TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40]), TrainParams('runlr01B',30,'test2w5_modelgrusimple_mid',7,[40])]
     # length 6
-    cur_train = [TrainParams('runlr01A',30,'test2w5_modelgrusimple_mid',6,[50]),TrainParams('runlr01B',20,'test2w5_modelgrusimple_mid',6,[50])]
+    #cur_train = [TrainParams('runlr01A',30,'test2w5_modelgrusimple_mid',6,[50]),TrainParams('runlr01B',20,'test2w5_modelgrusimple_mid',6,[50])]
+    
+    # small size to try to prevent overfitting
+    # length 6 and 7, 50 each
+    #cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_small',6,[50]),TrainParams('runlr01A',50,'test2w5_modelgrusimple_small',7,[40])]
+    # doesn't seem to work as well
+    
+    # add gaussian noise 0.1 to input and mid size models
+    cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
     
     for ct in cur_train:
         pass
@@ -1039,6 +1138,8 @@ if __name__ == '__main__':
             # stat filename pattern
             self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
                 self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
+            # multistep error stat filename pattern
+            self.ms_pat = 'msloss-{{}}'
             # stat filename for policy testing
             self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
                 self.r_type, self.n_trajectories)
@@ -1129,7 +1230,7 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams(use_real=False)
+    tp = TestParams(use_real=True)
     for ct in cur_train:
         pass
         dkt_test_models_mcts(ct,tp)
