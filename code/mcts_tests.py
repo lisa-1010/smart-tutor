@@ -502,14 +502,17 @@ def test_dkt_multistep(model_id, dataset, chkpt=None):
     # return the average MSE per step in a trajectory
     return mse_acc / len(dataset)
 
+# extract out the training states
 class ExtractCallback(tflearn.callbacks.Callback):
     '''
     Used to get the training/validation losses after model.fit.
     '''
     def __init__(self):
         self.tstates = []
-    def on_epoch_end(self, training_state):
-        self.tstates.append(copy.copy(training_state))
+    def on_epoch_begin(self,ts):
+        self.tstates.append([])
+    def on_batch_end(self,ts,snapshot):
+        self.tstates[-1].append(copy.copy(ts))
 
 def dkt_test_policy(model_id, horizon, n_trajectories, r_type, chkpt):
     '''
@@ -661,8 +664,8 @@ def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
             dkt_model.save(checkpoint_path)
             
             # update stats
-            train_losses[offset].extend([c.global_loss for c in ecall.tstates])
-            val_losses[offset].extend([c.val_loss for c in ecall.tstates])
+            train_losses[offset].extend([np.mean([ts.global_loss for ts in batch]) for batch in ecall.tstates])
+            val_losses[offset].extend([batch[-1].val_loss for batch in ecall.tstates])
             
             # update epochs_trained
             epochs_trained = ep+1
