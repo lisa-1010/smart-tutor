@@ -635,8 +635,6 @@ def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
     #load data
     data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
     input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
-    processed_input_data = input_data_ + (params.noise * np.random.randn(*input_data_.shape))
-    train_data = (processed_input_data[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
     
     for offset in six.moves.range(chunk_num_runs):
         r = runstartix + offset
@@ -656,7 +654,12 @@ def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
             
             # train
             ecall = ExtractCallback()
-            dkt_model.train(train_data, n_epoch=epochs_to_train, callbacks=ecall, shuffle=params.shuffle, load_checkpoint=False)
+            
+            # add noise every epoch
+            for _ in six.moves.range(epochs_to_train):
+                processed_input_data = input_data_ + (params.noise * np.random.randn(*input_data_.shape))
+                train_data = (processed_input_data[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
+                dkt_model.train(train_data, n_epoch=1, callbacks=ecall, shuffle=params.shuffle, load_checkpoint=False)
             
             # save the checkpoint
             checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
@@ -1145,11 +1148,14 @@ if __name__ == '__main__':
     # doesn't seem to work as well
     
     # add gaussian noise 0.1 to input and mid size models
-    cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
+    #cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
+    
+    # further refined learning rate to 0.001 for stability and have new small noise 0.01 every epoch
+    cur_train = [TrainParams('runlr001A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.01), TrainParams('runlr001A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.01)]
     
     for ct in cur_train:
         pass
-        #dkt_train_models(ct)
+        dkt_train_models(ct)
     #----------------------------------------------------------------------
     
     class TestParams:
@@ -1277,7 +1283,7 @@ if __name__ == '__main__':
         pass
         #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
-        dkt_test_models_multistep(ct,tp)
+        #dkt_test_models_multistep(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
         #dkt_test_models_policy(ct,tp)
