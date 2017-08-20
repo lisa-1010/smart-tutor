@@ -974,7 +974,7 @@ class TrainParams(object):
         self.dir_name = 'experiments/{}{}-dropout{}-shuffle{}-data-{}'.format(
             self.model_id,noise_str,int(self.dropout*10),int(self.shuffle),self.datafile)
         # pattern for the checkpoints
-        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}.ckpt'
         # stat file
         self.stat_name = 'stats-{}'.format(self.run_name)
     
@@ -1008,7 +1008,7 @@ class TrainParams2(object):
         self.dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(
             self.model_id,int(self.dropout*10),int(self.shuffle),self.datafile)
         # pattern for the checkpoints
-        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}.ckpt'
         # stat file
         self.stat_name = 'stats-{}'.format(self.run_name)
 
