@@ -688,7 +688,7 @@ def dkt_train_models(params):
     train_losses = []
     val_losses = []
     
-    n_jobs = min(1, params.num_runs) # seems like there are problems on windows
+    n_jobs = min(5, params.num_runs) # seems like there are problems on windows
     # need to be a multiple of number of jobs so I don't have to deal with uneven leftovers
     assert(params.num_runs % n_jobs == 0)
     runs_per_job = int(params.num_runs / n_jobs)
@@ -1148,7 +1148,7 @@ if __name__ == '__main__':
     
     for ct in cur_train:
         pass
-        dkt_train_models(ct)
+        #dkt_train_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
@@ -1176,10 +1176,10 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams(use_real=True)
+    tp = TestParams(use_real=False)
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_multistep(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
