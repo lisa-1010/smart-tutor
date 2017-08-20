@@ -1,4 +1,0 @@
-model_checkpoint_path: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2_model2_tiny-dropout10-shuffle0-data-test2-n10000-l3-random.pickle/checkpoint-runB49-epoch40"
-all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2_model2_tiny/_-5640"
-all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/checkpoints/test2_model2_tiny/_-5781"
-all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2_model2_tiny-dropout10-shuffle0-data-test2-n10000-l3-random.pickle/checkpoint-runB49-epoch40"
