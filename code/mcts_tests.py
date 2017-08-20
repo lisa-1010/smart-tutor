@@ -25,7 +25,6 @@ import constants
 import data_generator as dg
 import concept_dependency_graph as cdg
 import student as st
-import exercise as exer
 import dynamics_model_class as dmc
 import dataset_utils
 
