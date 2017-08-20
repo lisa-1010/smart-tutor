@@ -90,7 +90,7 @@ class DynamicsModel(object):
             utils.check_if_path_exists_or_create(checkpoint_dir)
 
             self._model = tflearn.DNN(self.net, tensorboard_verbose=0, tensorboard_dir=tensorboard_dir, \
-                                    checkpoint_path=checkpoint_path, max_checkpoints=3)
+                                    checkpoint_path=checkpoint_path, max_checkpoints=0)
 
             if load_checkpoint:
                 checkpoint = tf.train.latest_checkpoint(checkpoint_dir)  # can be none of no checkpoint exists
