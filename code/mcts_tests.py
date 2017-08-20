@@ -944,6 +944,167 @@ def dkt_test_models_proper_rme(trainparams,mctsparams,envs):
     rmestats_path = '{}/{}'.format(trainparams.dir_name,rmestat_name)
     np.savez(rmestats_path, evals=rewards)
 
+############################################################################
+# Parameters for training models and testing them
+############################################################################
+class TrainParams(object):
+    '''
+    Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
+    '''
+    def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0,noise=0.0):
+        self.model_id = model_id
+        self.n_concepts = 5
+        self.transition_after = True
+        self.dropout = dropout
+        self.shuffle = True
+        # variance of gaussian noise added to the input
+        self.noise = noise
+        self.seqlen = seqlen
+        self.datafile = 'test2a-w{}-n100000-l{}-random.pickle'.format(self.n_concepts, self.seqlen)
+        # which epochs (zero-based) to save, the last saved epoch is the total epoch
+        self.saved_epochs = saved_epochs
+        # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
+        self.run_name = rname
+        # how many runs
+        self.num_runs = nruns
+
+        # these names are derived from above and should not be touched generally
+        # folder to put the checkpoints into
+        noise_str = '-noise{:.2f}'.format(self.noise) if self.noise > 0.0 else ''
+        self.dir_name = 'experiments/{}{}-dropout{}-shuffle{}-data-{}'.format(
+            self.model_id,noise_str,int(self.dropout*10),int(self.shuffle),self.datafile)
+        # pattern for the checkpoints
+        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+        # stat file
+        self.stat_name = 'stats-{}'.format(self.run_name)
+    
+class TrainParams2(object):
+    '''
+    Parameters for training models. These correspond to student2 with 2 skills, and the optimal policy is 2 steps.
+    '''
+    def __init__(self, rname, nruns, model_id, saved_epochs):
+        #self.model_id = 'test2_model2simple_tiny'
+        #self.model_id = 'test2_model2_tiny'
+        #self.model_id = 'test2_model2gru_tiny'
+        self.model_id = model_id
+        self.n_concepts = 2
+        self.dropout = 1.0
+        self.shuffle = False
+        self.seqlen = 3 # have tried length 2 and length 3
+        self.datafile = 'test2-n10000-l{}-random.pickle'.format(self.seqlen)
+        # which epochs (zero-based) to save, the last saved epoch is the total epoch
+        # for length 2
+        # 54, 46 simple, 43 gru, 20 for earlier for simple and gru, 30 for earlier for lstm
+        # with binary crossentropy, 40, 40 simple, 40 gru (maybe 30 if you feel like it)
+        # for length 3
+        self.saved_epochs = saved_epochs
+        # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
+        self.run_name = rname
+        # how many runs
+        self.num_runs = nruns
+
+        # these names are derived from above and should not be touched generally
+        # folder to put the checkpoints into
+        self.dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(
+            self.model_id,int(self.dropout*10),int(self.shuffle),self.datafile)
+        # pattern for the checkpoints
+        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
+        # stat file
+        self.stat_name = 'stats-{}'.format(self.run_name)
+
+class TestParams:
+    '''
+    Parameters for testing models with MCTS/policies. For testing student2 with 4 skills.
+    '''
+    def __init__(self, use_real=True):
+        self.r_type = SPARSE
+        self.n_rollouts = 20000
+        self.n_trajectories = 8
+        self.use_real = use_real
+        self.horizon = 8
+
+        # for testing initialq values
+        self.initialq_n_rollouts = 200000
+
+        # for extracting a policy
+        self.policy_n_rollouts = 20000
+
+        # for multistep error
+        self.mserror_file = 'test2a-w5-n100000-l7-random.pickle'
+
+        # for rme
+        self.rme_n_rollouts = 1000
+        self.rme_n_trajectories = 100
+
+        # below are generated values from above
+        # stat filename pattern
+        self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
+            self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
+        # multistep error stat filename pattern
+        self.ms_pat = 'msloss-{}'
+        # stat filename for policy testing
+        self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
+            self.r_type, self.n_trajectories)
+        # state filename for initial qval teseting
+        self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
+            self.r_type, self.initialq_n_rollouts)
+
+        # stat for extracting a policy
+        self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
+            self.r_type, self.policy_n_rollouts)
+
+        # stat for robust matrix evaluation
+        self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
+            self.r_type, self.rme_n_trajectories)
+
+        # stat for robust matrix evaluation
+        self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
+            self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
+    
+class TestParams2:
+    '''
+    Parameters for testing models with MCTS/policies. For testing student2 with 2 skills.
+    '''
+    def __init__(self, use_real=True):
+        self.r_type = SPARSE
+        self.n_rollouts = 1000
+        self.n_trajectories = 100
+        self.use_real = use_real
+        self.horizon = 2
+
+        # for testing initialq values
+        self.initialq_n_rollouts = 100000
+
+        # for extracting a policy
+        self.policy_n_rollouts = 20000
+
+        # for rme
+        self.rme_n_rollouts = 1000
+        self.rme_n_trajectories = 100
+
+        # below are generated values from above
+        # stat filename pattern
+        self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
+            self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
+        # stat filename for policy testing
+        self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
+            self.r_type, self.n_trajectories)
+        # state filename for initial qval teseting
+        self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
+            self.r_type, self.initialq_n_rollouts)
+
+        # stat for extracting a policy
+        self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
+            self.r_type, self.policy_n_rollouts)
+
+        # stat for robust matrix evaluation
+        self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
+            self.r_type, self.rme_n_trajectories)
+
+        # stat for robust matrix evaluation
+        self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
+            self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
+
 if __name__ == '__main__':
     starttime = time.time()
 
@@ -955,76 +1116,10 @@ if __name__ == '__main__':
     #test_student_exact()
     ############################################################################
     
-    
     ############################################################################
     # General tests where I train a bunch of models and save them
     # then I run analysis on the saved models
     ############################################################################
-    
-    class TrainParams(object):
-        '''
-        Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
-        '''
-        def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0,noise=0.0):
-            self.model_id = model_id
-            self.n_concepts = 5
-            self.transition_after = True
-            self.dropout = dropout
-            self.shuffle = True
-            # variance of gaussian noise added to the input
-            self.noise = noise
-            self.seqlen = seqlen
-            self.datafile = 'test2a-w{}-n100000-l{}-random.pickle'.format(self.n_concepts, self.seqlen)
-            # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            self.saved_epochs = saved_epochs
-            # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
-            self.run_name = rname
-            # how many runs
-            self.num_runs = nruns
-
-            # these names are derived from above and should not be touched generally
-            # folder to put the checkpoints into
-            noise_str = '-noise{:.2f}'.format(self.noise) if self.noise > 0.0 else ''
-            self.dir_name = 'experiments/{}{}-dropout{}-shuffle{}-data-{}'.format(
-                self.model_id,noise_str,int(self.dropout*10),int(self.shuffle),self.datafile)
-            # pattern for the checkpoints
-            self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
-            # stat file
-            self.stat_name = 'stats-{}'.format(self.run_name)
-    
-    class TrainParams2(object):
-        '''
-        Parameters for training models. These correspond to student2 with 2 skills, and the optimal policy is 2 steps.
-        '''
-        def __init__(self, rname, nruns, model_id, saved_epochs):
-            #self.model_id = 'test2_model2simple_tiny'
-            #self.model_id = 'test2_model2_tiny'
-            #self.model_id = 'test2_model2gru_tiny'
-            self.model_id = model_id
-            self.n_concepts = 2
-            self.dropout = 1.0
-            self.shuffle = False
-            self.seqlen = 3 # have tried length 2 and length 3
-            self.datafile = 'test2-n10000-l{}-random.pickle'.format(self.seqlen)
-            # which epochs (zero-based) to save, the last saved epoch is the total epoch
-            # for length 2
-            # 54, 46 simple, 43 gru, 20 for earlier for simple and gru, 30 for earlier for lstm
-            # with binary crossentropy, 40, 40 simple, 40 gru (maybe 30 if you feel like it)
-            # for length 3
-            self.saved_epochs = saved_epochs
-            # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
-            self.run_name = rname
-            # how many runs
-            self.num_runs = nruns
-
-            # these names are derived from above and should not be touched generally
-            # folder to put the checkpoints into
-            self.dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(
-                self.model_id,int(self.dropout*10),int(self.shuffle),self.datafile)
-            # pattern for the checkpoints
-            self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
-            # stat file
-            self.stat_name = 'stats-{}'.format(self.run_name)
         
     #----------------------------------------------------------------------
     # train and checkpoint the models
@@ -1155,102 +1250,7 @@ if __name__ == '__main__':
     for ct in cur_train:
         pass
         dkt_train_models(ct)
-    #----------------------------------------------------------------------
-    
-    class TestParams:
-        '''
-        Parameters for testing models with MCTS/policies. For testing student2 with 4 skills.
-        '''
-        def __init__(self, use_real=True):
-            self.r_type = SPARSE
-            self.n_rollouts = 20000
-            self.n_trajectories = 8
-            self.use_real = use_real
-            self.horizon = 8
-            
-            # for testing initialq values
-            self.initialq_n_rollouts = 200000
-            
-            # for extracting a policy
-            self.policy_n_rollouts = 20000
-            
-            # for multistep error
-            self.mserror_file = 'test2a-w5-n100000-l7-random.pickle'
-            
-            # for rme
-            self.rme_n_rollouts = 1000
-            self.rme_n_trajectories = 100
-            
-            # below are generated values from above
-            # stat filename pattern
-            self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
-                self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
-            # multistep error stat filename pattern
-            self.ms_pat = 'msloss-{}'
-            # stat filename for policy testing
-            self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
-                self.r_type, self.n_trajectories)
-            # state filename for initial qval teseting
-            self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
-                self.r_type, self.initialq_n_rollouts)
-            
-            # stat for extracting a policy
-            self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
-                self.r_type, self.policy_n_rollouts)
-            
-            # stat for robust matrix evaluation
-            self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
-                self.r_type, self.rme_n_trajectories)
-            
-            # stat for robust matrix evaluation
-            self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
-                self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
-    
-    class TestParams2:
-        '''
-        Parameters for testing models with MCTS/policies. For testing student2 with 2 skills.
-        '''
-        def __init__(self, use_real=True):
-            self.r_type = SPARSE
-            self.n_rollouts = 1000
-            self.n_trajectories = 100
-            self.use_real = use_real
-            self.horizon = 2
-            
-            # for testing initialq values
-            self.initialq_n_rollouts = 100000
-            
-            # for extracting a policy
-            self.policy_n_rollouts = 20000
-            
-            # for rme
-            self.rme_n_rollouts = 1000
-            self.rme_n_trajectories = 100
-            
-            # below are generated values from above
-            # stat filename pattern
-            self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
-                self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
-            # stat filename for policy testing
-            self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
-                self.r_type, self.n_trajectories)
-            # state filename for initial qval teseting
-            self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
-                self.r_type, self.initialq_n_rollouts)
-            
-            # stat for extracting a policy
-            self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
-                self.r_type, self.policy_n_rollouts)
-            
-            # stat for robust matrix evaluation
-            self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
-                self.r_type, self.rme_n_trajectories)
-            
-            # stat for robust matrix evaluation
-            self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
-                self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
-    
-    #----------------------------------------------------------------------
+    #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
     
