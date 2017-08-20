@@ -688,7 +688,7 @@ def dkt_train_models(params):
     train_losses = []
     val_losses = []
     
-    n_jobs = min(5, params.num_runs)
+    n_jobs = min(1, params.num_runs) # seems like there are problems on windows
     # need to be a multiple of number of jobs so I don't have to deal with uneven leftovers
     assert(params.num_runs % n_jobs == 0)
     runs_per_job = int(params.num_runs / n_jobs)
