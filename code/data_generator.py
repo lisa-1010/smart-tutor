@@ -45,7 +45,7 @@ def fulfilled_prereqs(concept_tree, knowledge, concepts):
     :return: bool
     '''
 
-    for i in xrange(len(concepts)):
+    for i in six.moves.range(len(concepts)):
         c = concepts[i]
         if c == 1:
             prereqs = concept_tree.get_prereqs(i)
@@ -123,7 +123,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, initial_know
     if (policy == 'modulo' or policy == 'random'):
         # for expert policy, we have to choose the next exercise online.
         exercise_seq = []
-        for i in xrange(seqlen):
+        for i in six.moves.range(seqlen):
             concepts = np.zeros((n_concepts,),dtype=np.int)
             if policy == 'modulo':
                 # choose exercise with modulo op. This imposes an ordering on exercises.
@@ -142,7 +142,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, initial_know
     student_state = []
     n_exercises_to_mastery = -1
     exercises = [] # so we can store sequence of exercises as numpy arrays (instead of arrays of exercise objects)
-    for i in xrange(seqlen):
+    for i in six.moves.range(seqlen):
         # print (s.knowledge)
         # store current states
         student_state.append(s.get_state())
@@ -165,7 +165,7 @@ def generate_student_sample(concept_tree, seqlen=100, student=None, initial_know
         else:
             print ("Did not learn all concepts after doing {} exercises.".format(seqlen))
     #six.print_(student_performance)
-    student_sample = zip(exercises, student_performance, student_knowledge, student_state)
+    student_sample = tuple(six.moves.zip(exercises, student_performance, student_knowledge, student_state))
     #six.print_(student_sample)
     return student_sample
 
@@ -187,7 +187,7 @@ def generate_data(concept_tree, student=None, filter_mastery=False, n_students=1
 
     data = []
     print ("Generating data for {} students with behavior policy {} and sequence length {}.".format(n_students, policy, seqlen))
-    for i in xrange(n_students):
+    for i in six.moves.range(n_students):
         if verbose:
             print ("Creating sample for {}th student".format(i))
         student_sample = generate_student_sample(concept_tree, student=student, seqlen=seqlen, initial_knowledge=None,

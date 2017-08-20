@@ -47,7 +47,7 @@ class ConceptDependencyGraph(object):
         self.n = n
         assert (n > 0), "Tree must have at least one node."
         self.root = 0
-        for i in xrange(0, n):
+        for i in six.moves.range(0, n):
             if 2 * i + 1 < n:
                 self.children[i].append(2 * i + 1)
                 self.parents[2 * i + 1].append(i)

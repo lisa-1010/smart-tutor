@@ -28,7 +28,7 @@ class SimpleMDP(object):
         # converts a knowledge numpy array to a state index
         ix = 0
         acc = 1
-        for i in xrange(self.n_concepts):
+        for i in six.moves.range(self.n_concepts):
             ix += acc * knowledge[i]
             acc *= 2
         return int(ix)
@@ -36,7 +36,7 @@ class SimpleMDP(object):
     def _i2k(self, ix):
         # converts a state index to a knowledge numpy array
         knowledge = np.zeros((self.n_concepts,))
-        for i in xrange(self.n_concepts):
+        for i in six.moves.range(self.n_concepts):
             knowledge[i] = ix % 2
             ix //= 2
         return knowledge
@@ -62,11 +62,11 @@ class SimpleMDP(object):
         # reward will be based on the knowledge state
         
         # now let's go through the data and accumulate the stats
-        for i in xrange(len(data)):
+        for i in six.moves.range(len(data)):
             # each trajectory
             # assume students start with concept 0 learned
             curr_s = 1
-            for t in xrange(len(data[i])):
+            for t in six.moves.range(len(data[i])):
                 # each timestep and next timestep
                 curr_a = self._a2i(data[i][t][0])
                 next_s = self._k2i(data[i][t][2])
@@ -78,13 +78,13 @@ class SimpleMDP(object):
         # make the transition matrix
         self.transition = np.zeros((self.n_states, self.n_concepts, self.n_states))
         # for unvisited state-action pairs, make them self-loops
-        for x in xrange(self.n_states):
-            for c in xrange(self.n_concepts):
+        for x in six.moves.range(self.n_states):
+            for c in six.moves.range(self.n_concepts):
                 if self.visit_count[x,c] == 0:
                     # self-loop
                     self.transition[x,c,x] = 1.0
                 else:
-                    for y in xrange(self.n_states):
+                    for y in six.moves.range(self.n_states):
                         self.transition[x,c,y] = 1.0 * self.transition_count[x,c,y] / self.visit_count[x,c]
     
     def vi(self, gamma):
@@ -97,10 +97,10 @@ class SimpleMDP(object):
         maxdiff = 1.0
         while maxdiff > epsilon:
             maxdiff = 0.0
-            for x in xrange(self.n_states):
-                for c in xrange(self.n_concepts):
+            for x in six.moves.range(self.n_states):
+                for c in six.moves.range(self.n_concepts):
                     rhs = 0.0
-                    for y in xrange(self.n_states):
+                    for y in six.moves.range(self.n_states):
                         # compute V(y)
                         next_v = np.max(self.q[y,:])
                         rhs += self.transition[x,c,y]*next_v
@@ -116,7 +116,7 @@ class SimpleFMDP(object):
         # converts a binary numpy array to a state index
         ix = 0
         acc = 1
-        for i in xrange(knowledge.shape[0]):
+        for i in six.moves.range(knowledge.shape[0]):
             ix += acc * knowledge[i]
             acc *= 2
         return int(ix)
@@ -124,7 +124,7 @@ class SimpleFMDP(object):
     def _i2b(self, ix):
         # converts a state index to a binary numpy array
         state = np.zeros((self.n_features,))
-        for i in xrange(self.n_features):
+        for i in six.moves.range(self.n_features):
             state[i] = ix % 2
             ix //= 2
         return state
@@ -162,11 +162,11 @@ class SimpleFMDP(object):
         six.print_(self.transition_count.shape)
         
         # go through data and collect statistics for p(i | action, j,k) for all features i,j,k
-        for i in xrange(len(data)):
+        for i in six.moves.range(len(data)):
             six.print_(i)
             # each trajectory
             # assume students start with concept 0 learned
-            for t in xrange(len(data[i])-1):
+            for t in six.moves.range(len(data[i])-1):
                 # each timestep and next timestep
                 curr_s = (data[i][t][3])
                 curr_a = self._a2i(data[i][t][0])
@@ -285,7 +285,7 @@ def expected_reward(data):
     :return: the sample mean of the posttest reward
     '''
     avg = 0.0
-    for i in xrange(len(data)):
+    for i in six.moves.range(len(data)):
         avg += np.mean(data[i][-1][2])
     return avg / len(data)
 
@@ -295,7 +295,7 @@ def expected_sparse_reward(data):
     :return: the sample mean of the sparse reward
     '''
     avg = 0.0
-    for i in xrange(len(data)):
+    for i in six.moves.range(len(data)):
         avg += np.prod(data[i][-1][2])
     return avg / len(data)
 
@@ -305,7 +305,7 @@ def percent_complete(data):
     :return: the percentage of trajectories with perfect posttest
     '''
     count = 0.0
-    for i in xrange(len(data)):
+    for i in six.moves.range(len(data)):
         if int(np.sum(data[i][-1][2])) == data[i][-1][2].shape[0]:
             count += 1
     return count / len(data)
@@ -315,10 +315,10 @@ def percent_all_seen(data):
     Return the percentage of trajectories where all skills other than skill 0 have been tested
     '''
     count = 0.0
-    for i in xrange(len(data)):
+    for i in six.moves.range(len(data)):
         seen = data[i][0][0].astype(np.int)
         seen[0] = 1
-        for j in xrange(len(data[i])):
+        for j in six.moves.range(len(data[i])):
             seen += data[i][j][0].astype(np.int)
         if np.all(seen > 0.5):
             count += 1.0

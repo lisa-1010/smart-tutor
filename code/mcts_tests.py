@@ -116,7 +116,7 @@ def test_student_exact_chunk(n_trajectories, dgraph, student, horizon, n_rollout
     For parallelization to run in a separate thread/process.
     '''
     acc = 0.0
-    for i in xrange(n_trajectories):
+    for i in six.moves.range(n_trajectories):
         print('traj i {}'.format(i))
         k = test_student_exact_single(dgraph, student, horizon, n_rollouts, r_type)
         acc += np.mean(k)
@@ -216,7 +216,7 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollou
     
     acc = 0.0
     best_q = 0.0
-    for i in xrange(n_trajectories):
+    for i in six.moves.range(n_trajectories):
         #print('traj i {}'.format(i))
         # create the model and simulators
         sim = s.copy()

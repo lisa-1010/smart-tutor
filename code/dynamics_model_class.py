@@ -17,6 +17,7 @@ from __future__ import print_function
 
 import os
 import datetime
+import six
 import tensorflow as tf
 import tflearn
 import numpy as np
@@ -121,7 +122,7 @@ class DynamicsModel(object):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
         net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
-        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
+        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in six.moves.range(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,
@@ -147,7 +148,7 @@ class DynamicsModel(object):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
         net, hidden_states_1 = tflearn.gru(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="gru_1")
-        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in xrange(n_timesteps)]
+        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in six.moves.range(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.001,

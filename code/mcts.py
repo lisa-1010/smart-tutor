@@ -276,7 +276,7 @@ class DKTState(object):
     def __hash__(self):
         # hash using immediate history
         if self.ob is not None:
-            return self.ob + self.act*2
+            return int(self.ob + self.act*2)
         else:
             return 0
         #return k2i(probs)

@@ -18,6 +18,7 @@ from __future__ import print_function
 
 
 import pickle
+import six
 import numpy as np
 import tensorflow as tf
 
@@ -47,9 +48,9 @@ def preprocess_data_for_dqn(data, reward_model="sparse"):
     n_concepts = len(exer)
 
     all_traces = []
-    for i in xrange(n_students):
+    for i in six.moves.range(n_students):
         trace = []
-        for t in xrange(n_timesteps - 1):
+        for t in six.moves.range(n_timesteps - 1):
             cur_sample = data[i][t]
             next_sample = data[i][t + 1]
             exer, perf, knowl = cur_sample
@@ -103,8 +104,8 @@ def preprocess_data_for_rnn(data):
     input_data = np.zeros((n_students, n_timesteps, n_inputdim))
     output_mask = np.zeros((n_students, n_timesteps, n_outputdim))
     target_data = np.zeros((n_students, n_timesteps, n_outputdim))
-    for i in xrange(n_students):
-        for t in xrange(n_timesteps):
+    for i in six.moves.range(n_students):
+        for t in six.moves.range(n_timesteps):
             cur_sample = data[i][t]
             next_sample = data[i][t+1]
             exer, perf, knowl = cur_sample[0], cur_sample[1], cur_sample[2]
