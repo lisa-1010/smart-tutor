@@ -1176,12 +1176,12 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams(use_real=False)
+    tp = TestParams(use_real=True)
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
-        #dkt_test_models_multistep(ct,tp)
+        dkt_test_models_multistep(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
         #dkt_test_models_proper_rme(ct,tp,envs)
         #dkt_test_models_policy(ct,tp)
