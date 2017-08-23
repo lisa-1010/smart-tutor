@@ -1125,25 +1125,18 @@ if __name__ == '__main__':
     # train and checkpoint the models
     
     # student2a 5 skills with training trajectory, random
-    # go back to mean squared loss and tuned learning rate of 0.01
-    # everything needs like 40 epochs to train, so directly go training
-    # use gru simple and do dropout and without
+    # go back to mean squared loss
     # dropout seems to suck though
-    #cur_train = [TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40],dropout=0.8)]
-    # length 7
-    #cur_train = [TrainParams('runlr01A',20,'test2w5_modelgrusimple_mid',7,[40]), TrainParams('runlr01B',30,'test2w5_modelgrusimple_mid',7,[40])]
-    # length 6
-    #cur_train = [TrainParams('runlr01A',30,'test2w5_modelgrusimple_mid',6,[50]),TrainParams('runlr01B',20,'test2w5_modelgrusimple_mid',6,[50])]
-    
-    # add gaussian noise 0.1 to input and mid size models
-    #cur_train = [TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.1), TrainParams('runlr01A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.1)]
     
     # further refined learning rate to 0.001 for stability and have new small noise 0.01 every epoch
     # doesn't seem to do much
     #cur_train = [TrainParams('runlr001A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.01), TrainParams('runlr001A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.01)]
     
     # okay let's look at stability of learning rate 0.0005 and no noise
-    cur_train = [TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',6,[80]), TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',7,[80])]
+    #cur_train = [TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',6,[80]), TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',7,[80])]
+    # length 6 use 50, length 5 use 40
+    # now train 50 models of each
+    cur_train = [TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[50]), TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[40])]
     
     for ct in cur_train:
         pass
