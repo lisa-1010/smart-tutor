@@ -1128,10 +1128,6 @@ if __name__ == '__main__':
     # go back to mean squared loss
     # dropout seems to suck though
     
-    # further refined learning rate to 0.001 for stability and have new small noise 0.01 every epoch
-    # doesn't seem to do much
-    #cur_train = [TrainParams('runlr001A',50,'test2w5_modelgrusimple_mid',6,[50],noise=0.01), TrainParams('runlr001A',50,'test2w5_modelgrusimple_mid',7,[40],noise=0.01)]
-    
     # okay let's look at stability of learning rate 0.0005 and no noise
     #cur_train = [TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',6,[80]), TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',7,[80])]
     # length 6 use 50, length 5 use 40
@@ -1140,7 +1136,7 @@ if __name__ == '__main__':
     
     for ct in cur_train:
         pass
-        dkt_train_models(ct)
+        #dkt_train_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
@@ -1171,7 +1167,7 @@ if __name__ == '__main__':
     tp = TestParams(use_real=True)
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_multistep(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
