@@ -1,5 +1,6 @@
 # Helper functions, cna be used for any RL model
 
+import six
 import numpy as np
 import data_generator as dg
 
@@ -55,7 +56,7 @@ def expected_reward(data):
     :return: the sample mean of the posttest reward
     '''
     avg = 0.0
-    for i in xrange(len(data)):
+    for i in six.moves.range(len(data)):
         avg += np.mean(data[i][-1][2])
     return avg / len(data)
 
@@ -66,7 +67,7 @@ def percent_complete(data):
     :return: the percentage of trajectories with perfect posttest
     '''
     count = 0.0
-    for i in xrange(len(data)):
+    for i in six.moves.range(len(data)):
         if int(np.sum(data[i][-1][2])) == data[i][-1][2].shape[0]:
             count += 1
     return count / len(data)
