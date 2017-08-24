@@ -1132,11 +1132,17 @@ if __name__ == '__main__':
     #cur_train = [TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',6,[80]), TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',7,[80])]
     # length 6 use 50, length 5 use 40
     # now train 50 models of each
-    cur_train = [TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[50]), TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[40])]
+    #cur_train = [TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[50]), TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[40])]
+    
+    # now try with some noise=0.05
+    # look at stability
+    #cur_train = [TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',6,[120],noise=0.05), TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',7,[120],noise=0.05)]
+    # now train 50 models of each
+    cur_train = [TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[100],noise=0.05), TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[90],noise=0.05)]
     
     for ct in cur_train:
         pass
-        #dkt_train_models(ct)
+        dkt_train_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
@@ -1164,10 +1170,10 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams(use_real=True)
+    tp = TestParams(use_real=False)
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_multistep(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
