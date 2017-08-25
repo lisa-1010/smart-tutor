@@ -220,7 +220,6 @@ class RnnStudentSim(object):
     '''
     A model-based simulator for a student. Maintains its own internal hidden state.
     Currently model can be shared because only the history matters
-    This is just a template.
     '''
 
     def __init__(self, model):
@@ -266,5 +265,63 @@ class RnnStudentSim(object):
 
         '''
         sim_copy = RnnStudentSim(self.model)
+        sim_copy.sequence = self.sequence[:] # deep copy
+        return sim_copy
+
+class RnnStudentSimEnsemble(object):
+    '''
+    A model-based simulator for a student.
+    It's an ensemble of many models and averages their predictions.
+    '''
+
+    def __init__(self, model_list):
+        self.model_list = model_list
+        self.seq_max_len = model_list[0].get_timesteps()
+        self.sequence = [] # will store up to seq_max_len
+        pass
+
+
+    def sample_observations(self):
+        """
+        Returns list of probabilities
+        """
+        # special case when self.sequence is empty
+        if not self.sequence:
+            return None
+        else:
+            # turns the list of input vectors, into a numpy matrix of shape (1, n_timesteps, 2*n_concepts)
+            # We need the first dimension since the network expects a batch.
+            rnn_input_sequence = np.expand_dims(np.array(self.sequence), axis=0)
+            t = len(self.sequence)
+            
+            # average the predictions
+            pred_list = []
+            for curr_model in self.model_list:
+                pred_list.append(curr_model.predict(rnn_input_sequence)[0][t-2])
+            
+            prob_success_action = np.mean(pred_list,axis=0)
+            #six.print_('prob success action shape {}'.format(prob_success_action.shape))
+            
+            # observation is a probability
+            return prob_success_action
+
+
+    def advance_simulator(self, action, observation):
+        '''
+        Given next action and observation, advance the internal hidden state of the simulator.
+        '''
+        input = d_utils.convert_to_rnn_input(action, observation)
+        if len(self.sequence) == self.seq_max_len:
+            self.sequence = self.sequence[1:] + [input]
+        else:
+            self.sequence.append(input)
+
+
+    def copy(self):
+        '''
+        Make a copy of the current simulator.
+
+        '''
+        sim_copy = RnnStudentSimEnsemble(self.model_list) #list of models is shared
         sim_copy.sequence = self.sequence[:] # deep copy
         return sim_copy
