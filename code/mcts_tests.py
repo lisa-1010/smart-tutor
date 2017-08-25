@@ -162,7 +162,7 @@ def test_student_exact():
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, use_real):
+def test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, dktcache, use_real):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
     :param dktcache: a dictionary to use for the dkt cache
@@ -170,7 +170,7 @@ def test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, u
     n_concepts = dgraph.n
 
     # make the model
-    model = dmc.RnnStudentSim(model)
+    model = dmc.RnnStudentSimEnsemble(model_list)
 
     #rollout_policy = default_policies.immediate_reward
     rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
@@ -198,18 +198,23 @@ def test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, u
         #print('Next state: {}'.format(str(new_root.state)))
     return sim.get_knowledge(), best_q_value
 
-def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollouts, r_type, dktcache=None, use_real=True):
+def test_dkt_chunk(n_trajectories, dgraph, s, model_id, checkpoints, horizon, n_rollouts, r_type, dktcache=None, use_real=True):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
+    Gets a list of checkpoints which means might use ensemble
     '''
     # load the model
     # add 2 to the horizon since MCTS might look at horizon+1 steps
-    if chkpt is not None:
-        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=False)
-        model.load(chkpt)
+    model_list = []
+    if checkpoints:
+        for chkpt in checkpoints:
+            model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=False)
+            model.load(chkpt)
+            model_list.append(model)
     else:
-        model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=True)
+        # empty list
+        model_list.append(dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=True))
     # initialize the shared dktcache across MCTS trials
     if dktcache is None:
         dktcache = dict()
@@ -220,7 +225,7 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollou
         #print('traj i {}'.format(i))
         # create the model and simulators
         sim = s.copy()
-        k, best_q_value = test_dkt_single(dgraph, sim, horizon, n_rollouts, model, r_type, dktcache, use_real)
+        k, best_q_value = test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, dktcache, use_real)
         final_reward = np.sum(k)
         if r_type == SPARSE:
             final_reward = np.prod(k)
@@ -228,9 +233,10 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, chkpt, horizon, n_rollou
         best_q += best_q_value
     return acc, best_q
 
-def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_trajectories, r_type, use_real, chkpt=None):
+def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_trajectories, r_type, use_real, checkpoints=[]):
     '''
     Test DKT+MCTS
+    Can accept a number of checkpoints, meaning to use an ensemble if more than one.
     '''
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
@@ -260,7 +266,7 @@ def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_traj
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, sim, model_id, chkpt, horizon, n_rollouts, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, sim, model_id, checkpoints, horizon, n_rollouts, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
@@ -301,7 +307,7 @@ def test_dkt_rme(model_id, n_rollouts, n_trajectories, r_type, dmcmodel, chkpt):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, dktsim, model_id, chkpt, horizon, n_rollouts, r_type, dktcache=dktcache, use_real=True) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, dktsim, model_id, [chkpt], horizon, n_rollouts, r_type, dktcache=dktcache, use_real=True) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
@@ -704,7 +710,6 @@ def dkt_train_models(params):
     stats_path = '{}/{}'.format(params.dir_name,params.stat_name)
     np.savez(stats_path,tloss=train_losses, vloss=val_losses,eps=params.saved_epochs)
 
-
 def dkt_test_models_mcts(trainparams,mctsparams):
     '''
     Given a set of runs, test the checkpointed models using MCTS
@@ -727,7 +732,7 @@ def dkt_test_models_mcts(trainparams,mctsparams):
             score, qval = test_dkt(
                 trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, 
                 mctsparams.horizon, mctsparams.n_rollouts, mctsparams.n_trajectories,
-                mctsparams.r_type, mctsparams.use_real, chkpt=checkpoint_path)
+                mctsparams.r_type, mctsparams.use_real, checkpoints=[checkpoint_path])
             
             # update stats
             scores[r].append(score)
@@ -736,6 +741,45 @@ def dkt_test_models_mcts(trainparams,mctsparams):
     
     # save stats
     mctsstat_name = mctsparams.stat_pat.format(trainparams.run_name)
+    mctsstats_path = '{}/{}'.format(trainparams.dir_name,mctsstat_name)
+    np.savez(mctsstats_path, scores=scores, qvals=qvals)
+
+def dkt_test_models_mcts_ensemble(trainparams,mctsparams):
+    '''
+    Given a set of runs, test ensemble models with MCTS
+    '''
+    
+    scores = [[] for _ in six.moves.range(mctsparams.ensemble_split)]
+    qvals = [[] for _ in six.moves.range(mctsparams.ensemble_split)]
+    
+    for en in six.moves.range(mctsparams.ensemble_split):
+        # compute how many runs to use
+        curr_num_runs = int((en+1) * trainparams.num_runs / mctsparams.ensemble_split)
+        for ep in trainparams.saved_epochs:
+            print('=================================================')
+            print('---------- Split {:1d}/{:1d} Runs {} Epoch {:2d} ----------'.format(en+1,mctsparams.ensemble_split, curr_num_runs, ep))
+            print('=================================================')
+            
+            # create the checkpoints of all models
+            curr_checkpoints = []
+            for r in six.moves.range(curr_num_runs):
+                checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+                checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+                curr_checkpoints.append(checkpoint_path)
+            
+            # test dkt
+            score, qval = test_dkt(
+                trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, 
+                mctsparams.horizon, mctsparams.n_rollouts, mctsparams.n_trajectories,
+                mctsparams.r_type, mctsparams.use_real, checkpoints=curr_checkpoints)
+            
+            # update stats
+            scores[en].append(score)
+            qvals[en].append(qval)
+            
+    
+    # save stats
+    mctsstat_name = mctsparams.ensemble_pat.format(trainparams.run_name)
     mctsstats_path = '{}/{}'.format(trainparams.dir_name,mctsstat_name)
     np.savez(mctsstats_path, scores=scores, qvals=qvals)
 
@@ -1022,7 +1066,11 @@ class TestParams:
         self.n_trajectories = 8
         self.use_real = use_real
         self.horizon = 8
-
+        
+        # for ensemble, how many partial ensembles to try
+        # i.e if 5, then try 1/5, 2/5, 3/5, 4/5, 5/5 of all the models
+        self.ensemble_split = 3
+        
         # for testing initialq values
         self.initialq_n_rollouts = 200000
 
@@ -1060,6 +1108,10 @@ class TestParams:
         # stat for robust matrix evaluation
         self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
             self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
+        
+        # stat filename pattern for ensemble testing
+        self.ensemble_pat = 'ensemble{}-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
+            self.ensemble_split, self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
     
 class TestParams2:
     '''
@@ -1174,9 +1226,14 @@ if __name__ == '__main__':
     for ct in cur_train:
         pass
         #dkt_test_models_mcts(ct,tp)
+        
+        dkt_test_models_mcts_ensemble(ct,tp)
+        
         #dkt_test_models_mcts_qval(ct,tp)
-        dkt_test_models_multistep(ct,tp)
+        #dkt_test_models_multistep(ct,tp)
         #dkt_test_models_extract_policy(ct,tp)
+        
+        # CODE NOT UPDATED YET SO MAY NOT WORK
         #dkt_test_models_proper_rme(ct,tp,envs)
         #dkt_test_models_policy(ct,tp)
     #----------------------------------------------------------------------
