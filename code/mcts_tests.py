@@ -27,6 +27,7 @@ import concept_dependency_graph as cdg
 import student as st
 import dynamics_model_class as dmc
 import dataset_utils
+import model_training as mtrain
 
 from simple_mdp import SimpleMDP
 from joblib import Parallel, delayed
@@ -624,91 +625,6 @@ def dkt_test_mcts_proper_rme(model_id, n_rollouts, n_trajectories, r_type, envs,
         rewards[i] = acc
     
     return rewards
-    
-
-def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
-    '''
-    Loads data and trains a batch of models.
-    A batch is a continguous sequence of runs
-    '''
-    
-    #six.print_('startix {} nruns {}'.format(runstartix,chunk_num_runs))
-    
-    train_losses = [[] for _ in six.moves.range(chunk_num_runs)]
-    val_losses = [[] for _ in six.moves.range(chunk_num_runs)]
-    
-    #load data
-    data = dataset_utils.load_data(filename='{}{}'.format(dg.SYN_DATA_DIR, params.datafile))
-    input_data_, output_mask_, target_data_ = dataset_utils.preprocess_data_for_rnn(data)
-    
-    for offset in six.moves.range(chunk_num_runs):
-        r = runstartix + offset
-        
-        # new model instantiation
-        dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen-1, dropout=params.dropout, load_checkpoint=False)
-        
-        epochs_trained = 0
-        for ep in params.saved_epochs:
-            print('=====================================')
-            print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
-            print('=====================================')
-            
-            # remember the epochs are given as zero-based
-            epochs_to_train = ep+1 - epochs_trained
-            assert epochs_to_train > 0
-            
-            # train
-            ecall = ExtractCallback()
-            
-            # add noise every epoch
-            for _ in six.moves.range(epochs_to_train):
-                processed_input_data = input_data_ + (params.noise * np.random.randn(*input_data_.shape))
-                train_data = (processed_input_data[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
-                dkt_model.train(train_data, n_epoch=1, callbacks=ecall, shuffle=params.shuffle, load_checkpoint=False)
-            
-            # save the checkpoint
-            checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
-            checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
-            dkt_model.save(checkpoint_path)
-            
-            # update stats
-            train_losses[offset].extend([np.mean([ts.global_loss for ts in batch]) for batch in ecall.tstates])
-            val_losses[offset].extend([batch[-1].val_loss for batch in ecall.tstates])
-            
-            # update epochs_trained
-            epochs_trained = ep+1
-    return (train_losses, val_losses)
-
-def dkt_train_models(params):
-    '''
-    Trains a bunch of random restarts of models, checkpointed at various times
-    '''
-    
-    # first try to create the checkpoint directory if it doesn't exist
-    try:
-        os.makedirs(params.dir_name)
-    except:
-        # do nothing if already exists
-        pass
-    
-    train_losses = []
-    val_losses = []
-    
-    n_jobs = min(5, params.num_runs) # seems like there are problems on windows
-    # need to be a multiple of number of jobs so I don't have to deal with uneven leftovers
-    assert(params.num_runs % n_jobs == 0)
-    runs_per_job = int(params.num_runs / n_jobs)
-    
-    losses = list(Parallel(n_jobs=n_jobs)(delayed(_dkt_train_models_chunk)(params,startix,runs_per_job) for startix in six.moves.range(0,params.num_runs,runs_per_job)))
-    
-    for tloss, vloss in losses:
-        train_losses.extend(tloss)
-        val_losses.extend(vloss)
-    #six.print_((train_losses,val_losses))
-    
-    # save stats
-    stats_path = '{}/{}'.format(params.dir_name,params.stat_name)
-    np.savez(stats_path,tloss=train_losses, vloss=val_losses,eps=params.saved_epochs)
 
 def dkt_test_models_mcts(trainparams,mctsparams):
     '''
@@ -988,74 +904,6 @@ def dkt_test_models_proper_rme(trainparams,mctsparams,envs):
     rmestats_path = '{}/{}'.format(trainparams.dir_name,rmestat_name)
     np.savez(rmestats_path, evals=rewards)
 
-############################################################################
-# Parameters for training models and testing them
-############################################################################
-class TrainParams(object):
-    '''
-    Parameters for training models. These are the ones corresponding to student2 with 4 skills where the optimal policy takes 6 steps.
-    '''
-    def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0,noise=0.0):
-        self.model_id = model_id
-        self.n_concepts = 5
-        self.transition_after = True
-        self.dropout = dropout
-        self.shuffle = True
-        # variance of gaussian noise added to the input
-        self.noise = noise
-        self.seqlen = seqlen
-        self.datafile = 'test2a-w{}-n100000-l{}-random.pickle'.format(self.n_concepts, self.seqlen)
-        # which epochs (zero-based) to save, the last saved epoch is the total epoch
-        self.saved_epochs = saved_epochs
-        # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
-        self.run_name = rname
-        # how many runs
-        self.num_runs = nruns
-
-        # these names are derived from above and should not be touched generally
-        # folder to put the checkpoints into
-        noise_str = '-noise{:.2f}'.format(self.noise) if self.noise > 0.0 else ''
-        self.dir_name = 'experiments/{}{}-dropout{}-shuffle{}-data-{}'.format(
-            self.model_id,noise_str,int(self.dropout*10),int(self.shuffle),self.datafile)
-        # pattern for the checkpoints
-        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
-        # stat file
-        self.stat_name = 'stats-{}'.format(self.run_name)
-    
-class TrainParams2(object):
-    '''
-    Parameters for training models. These correspond to student2 with 2 skills, and the optimal policy is 2 steps.
-    '''
-    def __init__(self, rname, nruns, model_id, saved_epochs):
-        #self.model_id = 'test2_model2simple_tiny'
-        #self.model_id = 'test2_model2_tiny'
-        #self.model_id = 'test2_model2gru_tiny'
-        self.model_id = model_id
-        self.n_concepts = 2
-        self.dropout = 1.0
-        self.shuffle = False
-        self.seqlen = 3 # have tried length 2 and length 3
-        self.datafile = 'test2-n10000-l{}-random.pickle'.format(self.seqlen)
-        # which epochs (zero-based) to save, the last saved epoch is the total epoch
-        # for length 2
-        # 54, 46 simple, 43 gru, 20 for earlier for simple and gru, 30 for earlier for lstm
-        # with binary crossentropy, 40, 40 simple, 40 gru (maybe 30 if you feel like it)
-        # for length 3
-        self.saved_epochs = saved_epochs
-        # name of these runs, which should be unique to one call to train models (unless you want to overwrite)
-        self.run_name = rname
-        # how many runs
-        self.num_runs = nruns
-
-        # these names are derived from above and should not be touched generally
-        # folder to put the checkpoints into
-        self.dir_name = 'experiments/{}-dropout{}-shuffle{}-data-{}'.format(
-            self.model_id,int(self.dropout*10),int(self.shuffle),self.datafile)
-        # pattern for the checkpoints
-        self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'
-        # stat file
-        self.stat_name = 'stats-{}'.format(self.run_name)
-
 class TestParams:
     '''
     Parameters for testing models with MCTS/policies. For testing student2 with 4 skills.
@@ -1190,11 +1038,11 @@ if __name__ == '__main__':
     # look at stability
     #cur_train = [TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',6,[120],noise=0.05), TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',7,[120],noise=0.05)]
     # now train 50 models of each
-    cur_train = [TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[100],noise=0.05), TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[90],noise=0.05)]
+    cur_train = [mtrain.TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[100],noise=0.05), mtrain.TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[90],noise=0.05)]
     
     for ct in cur_train:
         pass
-        #dkt_train_models(ct)
+        #mtrain.dkt_train_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
