@@ -648,7 +648,7 @@ def dkt_test_models_mcts(trainparams,mctsparams):
                 checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
                 checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
             else:
-                checkpoint_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
+                mem_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
                 checkpoint_path = '{}/{}'.format(trainparams.dir_name,mem_name)
             
             # test dkt
@@ -921,10 +921,10 @@ class TestParams:
     '''
     def __init__(self, use_real=True, use_mem=False):
         self.r_type = SPARSE
-        self.n_rollouts = 20000
+        self.n_rollouts = 4000
         self.n_trajectories = 8
         self.use_real = use_real
-        self.horizon = 8
+        self.horizon = 6
         
         # whether to use the memoized versions or not
         self.use_mem = use_mem
@@ -1021,8 +1021,8 @@ if __name__ == '__main__':
     
     for ct in cur_train:
         pass
-        mtrain.dkt_train_models(ct)
-        #mtrain.dkt_memoize_models(ct)
+        #mtrain.dkt_train_models(ct)
+        mtrain.dkt_memoize_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
@@ -1050,7 +1050,7 @@ if __name__ == '__main__':
         six.print_('\n'.join(envs))
 
     
-    tp = TestParams(use_real=True)
+    tp = TestParams(use_real=True,use_mem=True)
     for ct in cur_train:
         pass
         #dkt_test_models_mcts(ct,tp)

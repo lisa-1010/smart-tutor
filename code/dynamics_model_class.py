@@ -300,8 +300,8 @@ class RnnStudentSimMemEnsemble(object):
         observation is 0 or 1
         '''
         self.step += 1
-        next_branch = action_ob_encode(action.concept, observation)
-        self.history_ix = history_ix_append(n_concepts, self.history_ix, next_branch)
+        next_branch = action_ob_encode(self.n_concepts, action.concept, observation)
+        self.history_ix = history_ix_append(self.n_concepts, self.history_ix, next_branch)
 
 
     def copy(self):

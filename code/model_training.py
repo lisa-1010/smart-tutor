@@ -210,6 +210,8 @@ def dkt_memoize_chunk(params, runstartix, chunk_num_runs):
             
             # memoize
             dkt_memoize_single(params.n_concepts, params.model_id, checkpoint_path, params.mem_horizon, mem_path)
+            
+            six.print_('Finished.')
 
 def dkt_memoize_models(params):
     '''
@@ -270,4 +272,4 @@ class TrainParams(object):
         self.stat_name = 'stats-{}'.format(self.run_name)
         
         # memoized file pattern
-        self.mem_pat = 'mem-{}{}-epoch{}'
+        self.mem_pat = 'mem-{}{}-epoch{}.npz'
