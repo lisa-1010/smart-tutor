@@ -267,12 +267,9 @@ def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_traj
     test_student.knowledge[0] = 1 # initialize the first concept to be known
     sim = st.StudentExactSim(test_student.copy(), dgraph)
     
-    if not use_mem:
-        # create a shared dktcache across all processes
-        dktcache_manager = mp.Manager()
-        dktcache = dktcache_manager.dict()
-    else:
-        dktcache = None
+    # create a shared dktcache across all processes
+    dktcache_manager = mp.Manager()
+    dktcache = dktcache_manager.dict()
 
     print('Testing model: {}'.format(model_id))
     print('horizon: {}'.format(horizon))
@@ -690,7 +687,7 @@ def dkt_test_models_mcts_ensemble(trainparams,mctsparams):
                     checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
                     checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
                 else:
-                    checkpoint_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
+                    mem_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
                     checkpoint_path = '{}/{}'.format(trainparams.dir_name,mem_name)
                 curr_checkpoints.append(checkpoint_path)
             
@@ -931,7 +928,7 @@ class TestParams:
         
         # for ensemble, how many partial ensembles to try
         # i.e if 5, then try 1/5, 2/5, 3/5, 4/5, 5/5 of all the models
-        self.ensemble_split = 3
+        self.ensemble_split = 5
         
         # for testing initialq values
         self.initialq_n_rollouts = 200000
@@ -1054,10 +1051,11 @@ if __name__ == '__main__':
     tpFalse = TestParams(use_real=False,use_mem=True)
     for ct in cur_train:
         pass
-        dkt_test_models_mcts(ct,tp)
-        dkt_test_models_mcts(ct,tpFalse)
+        #dkt_test_models_mcts(ct,tp)
+        #dkt_test_models_mcts(ct,tpFalse)
         
-        #dkt_test_models_mcts_ensemble(ct,tp)
+        dkt_test_models_mcts_ensemble(ct,tp)
+        dkt_test_models_mcts_ensemble(ct,tpFalse)
         
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_multistep(ct,tp)
