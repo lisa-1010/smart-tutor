@@ -522,18 +522,6 @@ def test_dkt_multistep(model_id, dataset, chkpt=None):
     # return the average MSE per step in a trajectory
     return mse_acc / len(dataset)
 
-# extract out the training states
-class ExtractCallback(tflearn.callbacks.Callback):
-    '''
-    Used to get the training/validation losses after model.fit.
-    '''
-    def __init__(self):
-        self.tstates = []
-    def on_epoch_begin(self,ts):
-        self.tstates.append([])
-    def on_batch_end(self,ts,snapshot):
-        self.tstates[-1].append(copy.copy(ts))
-
 def dkt_test_policy(model_id, horizon, n_trajectories, r_type, chkpt):
     '''
     Tests the uniformly random policy (behavior) for student2 n4 on the learned model.
@@ -952,7 +940,7 @@ class TestParams:
         self.policy_n_rollouts = 20000
 
         # for multistep error
-        self.mserror_file = 'test2a-w5-n100000-l7-random.pickle'
+        self.mserror_file = 'test2a-w4-n100000-l5-random.pickle'
 
         # for rme
         self.rme_n_rollouts = 1000
@@ -1025,11 +1013,14 @@ if __name__ == '__main__':
     # student2a 4 skills random behavior policy
     # training length 5
     # first look at stability of learning rate 0.0005 and no noise
-    cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[60])]
+    #cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[40])]
+    
+    # now train 50 models
+    cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25])]
     
     for ct in cur_train:
         pass
-        #mtrain.dkt_train_models(ct)
+        mtrain.dkt_train_models(ct)
         #mtrain.dkt_memoize_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models

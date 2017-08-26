@@ -32,6 +32,17 @@ from joblib import Parallel, delayed
 from helpers import *
 from simple_mdp import create_custom_dependency
 
+# extract out the training states
+class ExtractCallback(tflearn.callbacks.Callback):
+    '''
+    Used to get the training/validation losses after model.fit.
+    '''
+    def __init__(self):
+        self.tstates = []
+    def on_epoch_begin(self,ts):
+        self.tstates.append([])
+    def on_batch_end(self,ts,snapshot):
+        self.tstates[-1].append(copy.copy(ts))
 
 def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
     '''
@@ -227,7 +238,7 @@ class TrainParams(object):
     '''
     def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0,noise=0.0):
         self.model_id = model_id
-        self.n_concepts = 5
+        self.n_concepts = 4
         self.transition_after = True
         self.dropout = dropout
         self.shuffle = True
