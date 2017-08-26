@@ -144,7 +144,7 @@ def make_student_action(n_concepts, action):
     conceptvec[action] = 1.0
     return st.StudentAction(concept, conceptvec)
 
-def dkt_memoize_single_recurse(n_concepts, dkt, horizon, step, history_ix, mem_arrays)
+def dkt_memoize_single_recurse(n_concepts, dkt, horizon, step, history_ix, mem_arrays):
     '''
     Recursively populate mem_arrays with the predictions of the dkt.
     :param dkt: the RnnStudentSim at the current history state
@@ -153,6 +153,11 @@ def dkt_memoize_single_recurse(n_concepts, dkt, horizon, step, history_ix, mem_a
     :param history_ix: the index of the current history
     :param mem_arrays: a list of memoization arrays per history length, with nothing at index 0
     '''
+    # debugging print
+    if False:
+        six.print_('Current history: {}'.format(dkt.sequence))
+        six.print_('Prediction: {}'.format(dkt.sample_observations()))
+        six.print_('Memoized Prediction: {}'.format(mem_arrays[step-1][history_ix]))
     
     if step > horizon:
         # we've finished
@@ -167,7 +172,7 @@ def dkt_memoize_single_recurse(n_concepts, dkt, horizon, step, history_ix, mem_a
             next_dkt = dkt.copy()
             next_dkt.advance_simulator(make_student_action(n_concepts,next_action),next_ob)
             # add new entry to the mem arrays
-            mem_arrays[step][next_history_ix,:] = next_dkt.sample_observations
+            mem_arrays[step][next_history_ix,:] = next_dkt.sample_observations()
             # recurse
             dkt_memoize_single_recurse(n_concepts, next_dkt, horizon, step+1, next_history_ix, mem_arrays)
 
@@ -187,10 +192,10 @@ def dkt_memoize_single(n_concepts, model_id, checkpoint, horizon, outfile):
     # compute the number of branches i.e |num actions|*2
     index_base = n_concepts * 2
     
-    # mem_arrays[0] is always None, because there is no prediction for history of length 0
+    # initialize all to zero
     mem_arrays = [None] * (horizon+1)
-    for i in six.moves.range(horizon):
-        mem_arrays[i+1] = np.zeros((num_histories(index_base,i+1),n_concepts))
+    for i in six.moves.range(horizon+1):
+        mem_arrays[i] = np.zeros((num_histories(index_base,i),n_concepts))
     
     # start populating the mem arrays recursive
     dkt_memoize_single_recurse(n_concepts, dkt, horizon, 1, 0, mem_arrays)

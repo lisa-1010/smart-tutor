@@ -38,7 +38,7 @@ n_outputdim = 10
 class DynamicsModel(object):
 
     def __init__(self, model_id, timesteps=1, dropout=1.0, load_checkpoint=False, use_sess=False):
-        print('Loading RNN dynamics model...')
+        #print('Loading RNN dynamics model...')
 
         # if timesteps:
         #     # if provided as an argument, overwrite n_timesteps from the model
@@ -83,8 +83,8 @@ class DynamicsModel(object):
             tensorboard_dir = '../tensorboard_logs/' + model_id + '/'
             checkpoint_dir = '../checkpoints/' + model_id + '/'
             checkpoint_path = checkpoint_dir + '_/'
-            print("Directory path for tensorboard summaries: {}".format(tensorboard_dir))
-            print("Checkpoint directory path: {}".format(checkpoint_dir))
+            #print("Directory path for tensorboard summaries: {}".format(tensorboard_dir))
+            #print("Checkpoint directory path: {}".format(checkpoint_dir))
 
             utils.check_if_path_exists_or_create(tensorboard_dir)
             utils.check_if_path_exists_or_create(checkpoint_dir)
@@ -94,14 +94,14 @@ class DynamicsModel(object):
 
             if load_checkpoint:
                 checkpoint = tf.train.latest_checkpoint(checkpoint_dir)  # can be none of no checkpoint exists
-                print ("Checkpoint filename: " + checkpoint)
+                #print ("Checkpoint filename: " + checkpoint)
                 if checkpoint:
                     self.model.load(checkpoint, weights_only=True, verbose=True)
-                    print('Checkpoint loaded.')
+                    #print('Checkpoint loaded.')
                 else:
-                    print('No checkpoint found. ')
-
-            print('Model loaded.')
+                    pass
+                    #print('No checkpoint found. ')
+            #print('Model loaded.')
 
     def _build_regression_lstm_net(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
                                            n_outputdim=n_outputdim, dropout=1.0):
