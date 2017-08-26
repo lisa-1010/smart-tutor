@@ -24,6 +24,7 @@ import concept_dependency_graph as cdg
 import student as st
 import dynamics_model_class as dmc
 import dataset_utils
+from utils import *
 
 from simple_mdp import SimpleMDP
 from joblib import Parallel, delayed
@@ -119,30 +120,6 @@ def dkt_train_models(params):
 
 
 ################################ memoize the model predictions #####################################
-
-def num_histories(index_base, horizon):
-    '''
-    Return the number of possible histories of the given horizon.
-    '''
-    return index_base ** horizon
-
-def action_ob_encode(n_concepts, action, ob):
-    '''
-    Encode (action,ob) tuple as a unique number.
-    '''
-    return n_concepts * ob + action
-
-def history_ix_append(n_concepts, history_ix, next_branch):
-    '''
-    History is encoded where the last tuple is the least significant digit.
-    '''
-    return history_ix * n_concepts * 2 + next_branch
-
-def make_student_action(n_concepts, action):
-    concept = action
-    conceptvec = np.zeros((n_concepts,))
-    conceptvec[action] = 1.0
-    return st.StudentAction(concept, conceptvec)
 
 def dkt_memoize_single_recurse(n_concepts, dkt, horizon, step, history_ix, mem_arrays):
     '''

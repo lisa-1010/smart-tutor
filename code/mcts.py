@@ -163,7 +163,7 @@ class DKTState(object):
         :param step: int, current step
         :param horizon: int, horizon
         :param r_type: an r_type
-        :param dktcache: a dictionary used for caching the Rnn predictions
+        :param dktcache: a dictionary used for caching the Rnn predictions or None to disable it
         :param use_real: use the sim as the real world, otherwise use model
         :param new_act: immediate action that led to this state
         :param new_ob: immediate observation that led to this state
@@ -203,8 +203,10 @@ class DKTState(object):
     def get_probs(self):
         # computes and caches the probs for the current state
         if self._probs is None:
-            # first try the dktcache
-            trycache = self.dktcache.get(self.histhash, None)
+            # first try the dktcache if available
+            trycache = None
+            if self.dktcache is not None:
+                trycache = self.dktcache.get(self.histhash, None)
             
             if trycache is None:
                 # actually run it and update the cache
@@ -212,8 +214,9 @@ class DKTState(object):
                 if trycache is None:
                     trycache = np.array([0.0] * self.sim.dgraph.n)
                     trycache[0] = 1.0
-            # cache back
-            self.dktcache[self.histhash] = trycache
+            # cache back if needed
+            if self.dktcache is not None:
+                self.dktcache[self.histhash] = trycache
             # cache at this state as well
             self._probs = trycache
         return self._probs

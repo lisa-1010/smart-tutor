@@ -268,6 +268,53 @@ class RnnStudentSim(object):
         sim_copy.sequence = self.sequence[:] # deep copy
         return sim_copy
 
+class RnnStudentSimMem(object):
+    '''
+    A model-based simulator for a student. Maintains its own internal hidden state.
+    Currently model can be shared because only the history matters
+    Uses a memoized model.
+    '''
+
+    def __init__(self, n_concepts, mem_arrays):
+        self.n_concepts = n_concepts
+        self.mem_arrays = mem_arrays
+        self.seq_max_len = len(mem_arrays)-1
+        # story the current state
+        self.step = 0
+        self.history_ix = 0
+
+
+    def sample_observations(self):
+        """
+        Returns next probabilities
+        """
+        # special case when self.sequence is empty
+        if self.step == 0:
+            return None
+        else:
+            return self.mem_arrays[self.step][self.history_ix,:]
+
+
+    def advance_simulator(self, action, observation):
+        '''
+        Given next action and observation, advance the internal hidden state of the simulator.
+        action is StudentAction
+        observation is 0 or 1
+        '''
+        self.step += 1
+        next_branch = utils.action_ob_encode(action.concept, observation)
+        self.history_ix = utils.history_ix_append(n_concepts, self.history_ix, next_branch)
+
+
+    def copy(self):
+        '''
+        Make a copy of the current simulator.
+        '''
+        sim_copy = RnnStudentSimMem(self.n_concepts, self.mem_arrays)
+        sim_copy.step = self.step
+        sim_copy.history_ix = self.history_ix
+        return sim_copy
+
 class RnnStudentSimEnsemble(object):
     '''
     A model-based simulator for a student.
