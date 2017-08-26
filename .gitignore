@@ -2,6 +2,9 @@
 synthetic_data/
 data/
 
+# Memoized DKTs
+mem-run*.npz
+
 # PyCharm
 .idea
 

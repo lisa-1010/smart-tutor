@@ -921,8 +921,8 @@ class TestParams:
     '''
     def __init__(self, use_real=True, use_mem=False):
         self.r_type = SPARSE
-        self.n_rollouts = 1000
-        self.n_trajectories = 16
+        self.n_rollouts = 10000
+        self.n_trajectories = 8
         self.use_real = use_real
         self.horizon = 6
         
@@ -1022,7 +1022,7 @@ if __name__ == '__main__':
     for ct in cur_train:
         pass
         #mtrain.dkt_train_models(ct)
-        mtrain.dkt_memoize_models(ct)
+        #mtrain.dkt_memoize_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
@@ -1051,9 +1051,11 @@ if __name__ == '__main__':
 
     
     tp = TestParams(use_real=True,use_mem=True)
+    tpFalse = TestParams(use_real=False,use_mem=True)
     for ct in cur_train:
         pass
-        #dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tp)
+        dkt_test_models_mcts(ct,tpFalse)
         
         #dkt_test_models_mcts_ensemble(ct,tp)
         
