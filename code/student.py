@@ -198,6 +198,26 @@ class Student2(object):
 
     # END OF class Student2
 
+class StudentAction(object):
+    '''
+    Represents an action of the tutor, i.e. a problem to give to the student.
+    Purpose: To facilitate swapping between vectorized and indexed representation of concepts.
+    '''
+    def __init__(self, concept, conceptvec):
+        self.concept = concept
+        self.conceptvec = conceptvec
+
+    def __eq__(self, other):
+        return self.concept == other.concept
+
+    def __hash__(self):
+        return self.concept
+
+def make_student_action(n_concepts, action):
+    concept = action
+    conceptvec = np.zeros((n_concepts,))
+    conceptvec[action] = 1.0
+    return StudentAction(concept, conceptvec)
 
 class StudentExactSim(object):
     '''
@@ -230,27 +250,43 @@ class StudentExactSim(object):
         new_copy = StudentExactSim(new_student, self.dgraph)
         return new_copy
 
-
-class StudentAction(object):
+class RnnStudent2SimExact(object):
     '''
-    Represents an action of the tutor, i.e. a problem to give to the student.
-    Purpose: To facilitate swapping between vectorized and indexed representation of concepts.
+    A wrapper in the style of RnnStudentSim for the real environment.
+    Wraps around a student2 environment.
     '''
-    def __init__(self, concept, conceptvec):
-        self.concept = concept
-        self.conceptvec = conceptvec
 
-    def __eq__(self, other):
-        return self.concept == other.concept
+    def __init__(self, dgraph):
+        self.student = Student2(dgraph.n, True)
+        # initial skill 0 to be known
+        self.student.knowledge[0] = 1.0
+        
+        self.dgraph = dgraph
 
-    def __hash__(self):
-        return self.concept
+    def advance_simulator(self, action, observation):
+        '''
+        Given next action and observation, ignore the observation and just
+        update the student2 normally. This means that technically if the given observation
+        doesn't match the true observation, this will be in an indeterminate state. However
+        it will be up to the user to make sure this behavior is contained. For example in forward
+        search, because the probability of transitioning to such a state is 0, any value beyond this
+        branch will be multiplied by zero and safely ignored.
+        :param action: StudentAction object
+        :param observation: (0,1) but ignored
+        '''
+        self.student.do_exercise(self.dgraph, action)
+    
+    def sample_observations(self):
+        return self.student.knowledge
 
-def make_student_action(n_concepts, action):
-    concept = action
-    conceptvec = np.zeros((n_concepts,))
-    conceptvec[action] = 1.0
-    return StudentAction(concept, conceptvec)
+    def copy(self):
+        '''
+        Make a copy of the current simulator.
+        '''
+        new_student = self.student.copy()
+        new_copy = RnnStudent2SimExact(self.dgraph)
+        new_copy.student = new_student
+        return new_copy
 
 class StudentDKTSim(object):
     '''
