@@ -246,6 +246,12 @@ class StudentAction(object):
     def __hash__(self):
         return self.concept
 
+def make_student_action(n_concepts, action):
+    concept = action
+    conceptvec = np.zeros((n_concepts,))
+    conceptvec[action] = 1.0
+    return StudentAction(concept, conceptvec)
+
 class StudentDKTSim(object):
     '''
     A model-based simulator for a student. Maintains its own internal history. This wraps around a DKT, which is maintained in a separate process in order to not conflict with stuff in the current thread. Also uses a cache to help speed things up.

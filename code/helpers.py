@@ -4,7 +4,6 @@ import six
 import numpy as np
 import data_generator as dg
 
-
 def k2i(knowledge):
     # converts a knowledge numpy array to a state index
     ix = 0
@@ -71,3 +70,23 @@ def percent_complete(data):
         if int(np.sum(data[i][-1][2])) == data[i][-1][2].shape[0]:
             count += 1
     return count / len(data)
+
+############ converting histories to indices ##############################
+
+def num_histories(index_base, horizon):
+    '''
+    Return the number of possible histories of the given horizon.
+    '''
+    return index_base ** horizon
+
+def action_ob_encode(n_concepts, action, ob):
+    '''
+    Encode (action,ob) tuple as a unique number.
+    '''
+    return n_concepts * ob + action
+
+def history_ix_append(n_concepts, history_ix, next_branch):
+    '''
+    History is encoded where the last tuple is the least significant digit.
+    '''
+    return history_ix * n_concepts * 2 + next_branch

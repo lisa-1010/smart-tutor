@@ -163,7 +163,7 @@ def test_student_exact():
     print('Average posttest mcts: {}'.format(avg))
 
 
-def test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, dktcache, use_real):
+def test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, use_mem, dktcache, use_real):
     '''
     Performs a single trajectory with MCTS and returns the final true student knowledge.
     :param dktcache: a dictionary to use for the dkt cache
@@ -171,7 +171,10 @@ def test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, dktcac
     n_concepts = dgraph.n
 
     # make the model
-    model = dmc.RnnStudentSimEnsemble(model_list)
+    if not use_mem:
+        model = dmc.RnnStudentSimEnsemble(model_list)
+    else:
+        model = dmc.RnnStudentSimMemEnsemble(n_concepts, model_list)
 
     #rollout_policy = default_policies.immediate_reward
     rollout_policy = default_policies.RandomKStepRollOut(horizon+1)
@@ -199,7 +202,7 @@ def test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, dktcac
         #print('Next state: {}'.format(str(new_root.state)))
     return sim.get_knowledge(), best_q_value
 
-def test_dkt_chunk(n_trajectories, dgraph, s, model_id, checkpoints, horizon, n_rollouts, r_type, dktcache=None, use_real=True):
+def test_dkt_chunk(n_trajectories, dgraph, s, model_id, checkpoints, horizon, n_rollouts, r_type, dktcache=None, use_real=True, use_mem=False):
     '''
     Runs a bunch of trajectories and returns the avg posttest score.
     For parallelization to run in a separate thread/process.
@@ -210,14 +213,19 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, checkpoints, horizon, n_
     model_list = []
     if checkpoints:
         for chkpt in checkpoints:
-            model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=False)
-            model.load(chkpt)
-            model_list.append(model)
+            # either actual checkpoints, or memoized functions
+            if not use_mem:
+                model = dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=False)
+                model.load(chkpt)
+                model_list.append(model)
+            else:
+                mem_arrays = np.load(chkpt)['mem_arrays']
+                model_list.append(mem_arrays)
     else:
         # empty list
         model_list.append(dmc.DynamicsModel(model_id=model_id, timesteps=horizon+2, load_checkpoint=True))
     # initialize the shared dktcache across MCTS trials
-    if dktcache is None:
+    if dktcache is None and not use_mem:
         dktcache = dict()
     
     acc = 0.0
@@ -226,7 +234,7 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, checkpoints, horizon, n_
         #print('traj i {}'.format(i))
         # create the model and simulators
         sim = s.copy()
-        k, best_q_value = test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, dktcache, use_real)
+        k, best_q_value = test_dkt_single(dgraph, sim, horizon, n_rollouts, model_list, r_type, use_mem, dktcache, use_real)
         final_reward = np.sum(k)
         if r_type == SPARSE:
             final_reward = np.prod(k)
@@ -234,7 +242,7 @@ def test_dkt_chunk(n_trajectories, dgraph, s, model_id, checkpoints, horizon, n_
         best_q += best_q_value
     return acc, best_q
 
-def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_trajectories, r_type, use_real, checkpoints=[]):
+def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_trajectories, r_type, use_real, use_mem, checkpoints=[]):
     '''
     Test DKT+MCTS
     Can accept a number of checkpoints, meaning to use an ensemble if more than one.
@@ -259,15 +267,18 @@ def test_dkt(model_id, n_concepts, transition_after, horizon, n_rollouts, n_traj
     test_student.knowledge[0] = 1 # initialize the first concept to be known
     sim = st.StudentExactSim(test_student.copy(), dgraph)
     
-    # create a shared dktcache across all processes
-    dktcache_manager = mp.Manager()
-    dktcache = dktcache_manager.dict()
+    if not use_mem:
+        # create a shared dktcache across all processes
+        dktcache_manager = mp.Manager()
+        dktcache = dktcache_manager.dict()
+    else:
+        dktcache = None
 
     print('Testing model: {}'.format(model_id))
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, sim, model_id, checkpoints, horizon, n_rollouts, r_type, dktcache=dktcache, use_real=use_real) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, sim, model_id, checkpoints, horizon, n_rollouts, r_type, dktcache=dktcache, use_real=use_real, use_mem=use_mem) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
@@ -282,6 +293,9 @@ def test_dkt_rme(model_id, n_rollouts, n_trajectories, r_type, dmcmodel, chkpt):
     '''
     Test DKT+MCTS where the real environment is a StudentDKTSim with a proxy DynamicsModel
     '''
+    
+    use_mem = False # TODO
+    
     import concept_dependency_graph as cdg
     from simple_mdp import create_custom_dependency
     
@@ -308,7 +322,7 @@ def test_dkt_rme(model_id, n_rollouts, n_trajectories, r_type, dmcmodel, chkpt):
     print('horizon: {}'.format(horizon))
     print('rollouts: {}'.format(n_rollouts))
 
-    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, dktsim, model_id, [chkpt], horizon, n_rollouts, r_type, dktcache=dktcache, use_real=True) for _ in range(n_jobs)))
+    accs = np.array(Parallel(n_jobs=n_jobs)(delayed(test_dkt_chunk)(traj_per_job, dgraph, dktsim, model_id, [chkpt], horizon, n_rollouts, r_type, dktcache=dktcache, use_real=True, use_mem=use_mem) for _ in range(n_jobs)))
     results = np.sum(accs,axis=0) / (n_jobs * traj_per_job)
     avg_acc, avg_best_q = results[0], results[1]
 
@@ -641,14 +655,19 @@ def dkt_test_models_mcts(trainparams,mctsparams):
             print('=====================================')
             
             # load model from checkpoint
-            checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
-            checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            # or mem if using mem
+            if not mctsparams.use_mem:
+                checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+                checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+            else:
+                checkpoint_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
+                checkpoint_path = '{}/{}'.format(trainparams.dir_name,mem_name)
             
             # test dkt
             score, qval = test_dkt(
                 trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, 
                 mctsparams.horizon, mctsparams.n_rollouts, mctsparams.n_trajectories,
-                mctsparams.r_type, mctsparams.use_real, checkpoints=[checkpoint_path])
+                mctsparams.r_type, mctsparams.use_real, mctsparams.use_mem, checkpoints=[checkpoint_path])
             
             # update stats
             scores[r].append(score)
@@ -679,15 +698,19 @@ def dkt_test_models_mcts_ensemble(trainparams,mctsparams):
             # create the checkpoints of all models
             curr_checkpoints = []
             for r in six.moves.range(curr_num_runs):
-                checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
-                checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+                if not mctsparams.use_mem:
+                    checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+                    checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+                else:
+                    checkpoint_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
+                    checkpoint_path = '{}/{}'.format(trainparams.dir_name,mem_name)
                 curr_checkpoints.append(checkpoint_path)
             
             # test dkt
             score, qval = test_dkt(
                 trainparams.model_id, trainparams.n_concepts, trainparams.transition_after, 
                 mctsparams.horizon, mctsparams.n_rollouts, mctsparams.n_trajectories,
-                mctsparams.r_type, mctsparams.use_real, checkpoints=curr_checkpoints)
+                mctsparams.r_type, mctsparams.use_real, mctsparams.use_mem, checkpoints=curr_checkpoints)
             
             # update stats
             scores[en].append(score)
@@ -908,12 +931,15 @@ class TestParams:
     '''
     Parameters for testing models with MCTS/policies. For testing student2 with 4 skills.
     '''
-    def __init__(self, use_real=True):
+    def __init__(self, use_real=True, use_mem=False):
         self.r_type = SPARSE
         self.n_rollouts = 20000
         self.n_trajectories = 8
         self.use_real = use_real
         self.horizon = 8
+        
+        # whether to use the memoized versions or not
+        self.use_mem = use_mem
         
         # for ensemble, how many partial ensembles to try
         # i.e if 5, then try 1/5, 2/5, 3/5, 4/5, 5/5 of all the models
@@ -960,50 +986,6 @@ class TestParams:
         # stat filename pattern for ensemble testing
         self.ensemble_pat = 'ensemble{}-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
             self.ensemble_split, self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
-    
-class TestParams2:
-    '''
-    Parameters for testing models with MCTS/policies. For testing student2 with 2 skills.
-    '''
-    def __init__(self, use_real=True):
-        self.r_type = SPARSE
-        self.n_rollouts = 1000
-        self.n_trajectories = 100
-        self.use_real = use_real
-        self.horizon = 2
-
-        # for testing initialq values
-        self.initialq_n_rollouts = 100000
-
-        # for extracting a policy
-        self.policy_n_rollouts = 20000
-
-        # for rme
-        self.rme_n_rollouts = 1000
-        self.rme_n_trajectories = 100
-
-        # below are generated values from above
-        # stat filename pattern
-        self.stat_pat = 'mcts-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
-            self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
-        # stat filename for policy testing
-        self.policy_pat = 'policies-rtype{}-trajectories{}-{{}}'.format(
-            self.r_type, self.n_trajectories)
-        # state filename for initial qval teseting
-        self.initialq_pat = 'initialq-rtype{}-rollouts{}-{{}}'.format(
-            self.r_type, self.initialq_n_rollouts)
-
-        # stat for extracting a policy
-        self.optpolicy_pat = 'optpolicy-rtype{}-rollouts{}-{{}}'.format(
-            self.r_type, self.policy_n_rollouts)
-
-        # stat for robust matrix evaluation
-        self.rme_pat = 'rme-rtype{}-trajectories{}-{{}}'.format(
-            self.r_type, self.rme_n_trajectories)
-
-        # stat for robust matrix evaluation
-        self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
-            self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
 
 if __name__ == '__main__':
     starttime = time.time()
@@ -1038,11 +1020,17 @@ if __name__ == '__main__':
     # look at stability
     #cur_train = [TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',6,[120],noise=0.05), TrainParams('runlr0005A',10,'test2w5_modelgrusimple_mid',7,[120],noise=0.05)]
     # now train 50 models of each
-    cur_train = [mtrain.TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[100],noise=0.05), mtrain.TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[90],noise=0.05)]
+    #cur_train = [mtrain.TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',6,[100],noise=0.05), mtrain.TrainParams('runlr0005B',50,'test2w5_modelgrusimple_mid',7,[90],noise=0.05)]
+    
+    # student2a 4 skills random behavior policy
+    # training length 5
+    # first look at stability of learning rate 0.0005 and no noise
+    cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[60])]
     
     for ct in cur_train:
         pass
         #mtrain.dkt_train_models(ct)
+        #mtrain.dkt_memoize_models(ct)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
@@ -1075,7 +1063,7 @@ if __name__ == '__main__':
         pass
         #dkt_test_models_mcts(ct,tp)
         
-        dkt_test_models_mcts_ensemble(ct,tp)
+        #dkt_test_models_mcts_ensemble(ct,tp)
         
         #dkt_test_models_mcts_qval(ct,tp)
         #dkt_test_models_multistep(ct,tp)

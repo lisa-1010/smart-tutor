@@ -24,12 +24,12 @@ import concept_dependency_graph as cdg
 import student as st
 import dynamics_model_class as dmc
 import dataset_utils
-from utils import *
 
 from simple_mdp import SimpleMDP
 from joblib import Parallel, delayed
 
-from helpers import * # helper functions
+# helper functions
+from helpers import *
 from simple_mdp import create_custom_dependency
 
 
@@ -147,7 +147,7 @@ def dkt_memoize_single_recurse(n_concepts, dkt, horizon, step, history_ix, mem_a
             next_history_ix = history_ix_append(n_concepts, history_ix, next_branch)
             # advance the DKT
             next_dkt = dkt.copy()
-            next_dkt.advance_simulator(make_student_action(n_concepts,next_action),next_ob)
+            next_dkt.advance_simulator(st.make_student_action(n_concepts,next_action),next_ob)
             # add new entry to the mem arrays
             mem_arrays[step][next_history_ix,:] = next_dkt.sample_observations()
             # recurse
@@ -195,7 +195,7 @@ def dkt_memoize_chunk(params, runstartix, chunk_num_runs):
             
             # compute outfile name
             mem_name = params.mem_pat.format(params.run_name, r, ep)
-            mem_path = '{}/{}'.format(params.dir_name,checkpoint_name)
+            mem_path = '{}/{}'.format(params.dir_name,mem_name)
             
             # memoize
             dkt_memoize_single(params.n_concepts, params.model_id, checkpoint_path, params.mem_horizon, mem_path)

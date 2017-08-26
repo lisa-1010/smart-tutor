@@ -24,16 +24,11 @@ import numpy as np
 import multiprocessing as mp
 from multiprocessing.managers import BaseManager
 
+from helpers import *
 import utils
 import dataset_utils as d_utils
 import models_dict_utils
 FLAGS = tf.flags.FLAGS
-
-# n_timesteps = 10
-n_inputdim = 20
-n_hidden = 32
-n_outputdim = 10
-
 
 class DynamicsModel(object):
 
@@ -103,8 +98,8 @@ class DynamicsModel(object):
                     #print('No checkpoint found. ')
             #print('Model loaded.')
 
-    def _build_regression_lstm_net(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
-                                           n_outputdim=n_outputdim, dropout=1.0):
+    def _build_regression_lstm_net(self, n_timesteps=1, n_inputdim=None, n_hidden=None,
+                                           n_outputdim=None, dropout=1.0):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
         net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
@@ -115,8 +110,8 @@ class DynamicsModel(object):
                                  loss='mean_square') # mean square works; binary crossentropy does not work for some reason
         return net, hidden_states_1, hidden_states_2
     
-    def _build_regression_lstm_net2(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
-                                           n_outputdim=n_outputdim, dropout=1.0):
+    def _build_regression_lstm_net2(self, n_timesteps=1, n_inputdim=None, n_hidden=None,
+                                           n_outputdim=None, dropout=1.0):
         # don't have 2 lstms, just have a shared output layer
         # this alternative doesn't seem to work as well
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
@@ -129,8 +124,8 @@ class DynamicsModel(object):
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, None
 
-    def _build_regression_lstm_net_gru(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
-                                           n_outputdim=n_outputdim, dropout=1.0):
+    def _build_regression_lstm_net_gru(self, n_timesteps=1, n_inputdim=None, n_hidden=None,
+                                           n_outputdim=None, dropout=1.0):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
         net, hidden_states_1 = tflearn.gru(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="gru_1")
@@ -141,8 +136,8 @@ class DynamicsModel(object):
                                  loss='mean_square') # mean square works
         return net, hidden_states_1, hidden_states_2
     
-    def _build_regression_gru_net2(self, n_timesteps=1, n_inputdim=n_inputdim, n_hidden=n_hidden,
-                                           n_outputdim=n_outputdim, dropout=1.0):
+    def _build_regression_gru_net2(self, n_timesteps=1, n_inputdim=None, n_hidden=None,
+                                           n_outputdim=None, dropout=1.0):
         # don't have 2 lstms, just have a shared output layer
         # this alternative doesn't seem to work as well
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
@@ -268,17 +263,17 @@ class RnnStudentSim(object):
         sim_copy.sequence = self.sequence[:] # deep copy
         return sim_copy
 
-class RnnStudentSimMem(object):
+class RnnStudentSimMemEnsemble(object):
     '''
     A model-based simulator for a student. Maintains its own internal hidden state.
     Currently model can be shared because only the history matters
-    Uses a memoized model.
+    Uses an ensemble of memoized models.
     '''
 
-    def __init__(self, n_concepts, mem_arrays):
+    def __init__(self, n_concepts, mem_arrays_list):
         self.n_concepts = n_concepts
-        self.mem_arrays = mem_arrays
-        self.seq_max_len = len(mem_arrays)-1
+        self.mem_arrays_list = mem_arrays_list
+        self.seq_max_len = len(mem_arrays_list[0])-1
         # story the current state
         self.step = 0
         self.history_ix = 0
@@ -292,7 +287,10 @@ class RnnStudentSimMem(object):
         if self.step == 0:
             return None
         else:
-            return self.mem_arrays[self.step][self.history_ix,:]
+            pred_list = []
+            for mem_arrays in self.mem_arrays_list:
+                pred_list.append(mem_arrays[self.step][self.history_ix,:])
+            return np.mean(pred_list,axis=0)
 
 
     def advance_simulator(self, action, observation):
@@ -302,15 +300,15 @@ class RnnStudentSimMem(object):
         observation is 0 or 1
         '''
         self.step += 1
-        next_branch = utils.action_ob_encode(action.concept, observation)
-        self.history_ix = utils.history_ix_append(n_concepts, self.history_ix, next_branch)
+        next_branch = action_ob_encode(action.concept, observation)
+        self.history_ix = history_ix_append(n_concepts, self.history_ix, next_branch)
 
 
     def copy(self):
         '''
         Make a copy of the current simulator.
         '''
-        sim_copy = RnnStudentSimMem(self.n_concepts, self.mem_arrays)
+        sim_copy = RnnStudentSimMemEnsemble(self.n_concepts, self.mem_arrays_list)
         sim_copy.step = self.step
         sim_copy.history_ix = self.history_ix
         return sim_copy
