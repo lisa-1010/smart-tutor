@@ -921,8 +921,8 @@ class TestParams:
     '''
     def __init__(self, use_real=True, use_mem=False):
         self.r_type = SPARSE
-        self.n_rollouts = 4000
-        self.n_trajectories = 8
+        self.n_rollouts = 1000
+        self.n_trajectories = 16
         self.use_real = use_real
         self.horizon = 6
         

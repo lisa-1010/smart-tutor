@@ -342,7 +342,7 @@ class RnnStudentSimEnsemble(object):
             # average the predictions
             pred_list = []
             for curr_model in self.model_list:
-                pred_list.append(curr_model.predict(rnn_input_sequence)[0][t-2])
+                pred_list.append(curr_model.predict(rnn_input_sequence)[0][t-1])
             
             prob_success_action = np.mean(pred_list,axis=0)
             #six.print_('prob success action shape {}'.format(prob_success_action.shape))
