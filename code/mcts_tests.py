@@ -1011,18 +1011,18 @@ if __name__ == '__main__':
     # student2a 4 skills random behavior policy
     # training length 5
     # first look at stability of learning rate 0.0005
-    cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[40])]
+    #cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[40])]
     #cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[60],noise=0.05)]
     
     # now train 50 models
-    #cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25]), mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],noise=0.05)]
+    cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25]), mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],noise=0.05)]
     
     for ct in cur_train:
         pass
         #mtrain.dkt_train_models(ct)
         #mtrain.dkt_memoize_models(ct)
         
-        fsearch.dkt_forwardsearch(ct, 4, use_mem=True)
+        fsearch.dkt_forwardsearch(ct, 6, use_mem=True)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
