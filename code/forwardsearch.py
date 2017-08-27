@@ -176,25 +176,47 @@ def dkt_forwardsearch_single_recurse(n_concepts, dkt, sim, horizon, history_len)
     )
     
 
-def dkt_forwardsearch_single(n_concepts, dkt, sim, horizon):
+def dkt_forwardsearch_single(n_concepts, model_id, checkpoints, horizon, use_mem):
     '''
     Use forward search to find value of the optimal policy of dkt executed in sim and other information.
     '''
-    next_ssv,next_sv,next_sim_ssv,next_sim_sv,ss_list,s_list,sim_ss_list,sim_s_list = dkt_forwardsearch_single_recurse(
-        n_concepts, dkt, sim, horizon, 0)
+    if not use_mem:
+        model_list = []
+        for chkpt in checkpoints:
+            model = dmc.DynamicsModel(model_id, timesteps=horizon, load_checkpoint=False)
+            model.load(chkpt)
+            model_list.append(model)
+        dkt = dmc.RnnStudentSimEnsemble(model_list)
+    else:
+        mem_array_list = []
+        for chkpt in checkpoints:
+            mem_arrays = np.load(chkpt)['mem_arrays']
+            mem_array_list.append(mem_arrays)
+        dkt = dmc.RnnStudentSimMemEnsemble(n_concepts, mem_array_list)
+    
+    concept_tree = cdg.ConceptDependencyGraph()
+    concept_tree.init_default_tree(n_concepts)
+    sim = st.RnnStudent2SimExact(concept_tree)
+    
+    if False:
+        six.print_('Semisparse Value {}'.format(next_ssv))
+        six.print_('Spares Value {}'.format(next_sv))
+        six.print_('Semisparse Value Sim {}'.format(next_sim_ssv))
+        six.print_('Sparse Value Sim {}'.format(next_sim_sv))
+        six.print_('Semisparse Q-Values along sim trajectory {}'.format(ss_list))
+        six.print_('Sparse Q-Values along sim trajectory {}'.format(s_list))
+        six.print_('Semisparse Sim Q-Values along sim trajectory {}'.format(sim_ss_list))
+        six.print_('Sparse Sim Q-Values along sim trajectory {}'.format(sim_s_list))
+    
+    return dkt_forwardsearch_single_recurse(n_concepts, dkt, sim, horizon, 0)
 
-    six.print_('Semisparse Value {}'.format(next_ssv))
-    six.print_('Spares Value {}'.format(next_sv))
-    six.print_('Semisparse Value Sim {}'.format(next_sim_ssv))
-    six.print_('Sparse Value Sim {}'.format(next_sim_sv))
-    six.print_('Semisparse Q-Values along sim trajectory {}'.format(ss_list))
-    six.print_('Sparse Q-Values along sim trajectory {}'.format(s_list))
-    six.print_('Semisparse Sim Q-Values along sim trajectory {}'.format(sim_ss_list))
-    six.print_('Sparse Sim Q-Values along sim trajectory {}'.format(sim_s_list))
 
-
-def dkt_forwardsearch_chunk(params, runstartix, chunk_num_runs):
+def dkt_forwardsearch_chunk(params, horizon, runstartix, chunk_num_runs, use_mem):
+    fsdata = []
+    
     for offset in six.moves.range(chunk_num_runs):
+        fsdata.append([])
+        
         r = runstartix + offset
         
         for ep in params.saved_epochs:
@@ -202,33 +224,44 @@ def dkt_forwardsearch_chunk(params, runstartix, chunk_num_runs):
             print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
             print('=====================================')
             
-            # compute checkpoint name
-            checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
-            checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
+            if not use_mem:
+                # compute checkpoint name
+                checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
+                checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
+            else:
+                # compute outfile name
+                mem_name = params.mem_pat.format(params.run_name, r, ep)
+                checkpoint_path = '{}/{}'.format(params.dir_name,mem_name)
             
-            # compute outfile name
-            mem_name = params.mem_pat.format(params.run_name, r, ep)
-            mem_path = '{}/{}'.format(params.dir_name,mem_name)
+            # forward search
+            rundata = dkt_forwardsearch_single(params.n_concepts, params.model_id, [checkpoint_path], horizon, use_mem)
             
-            # memoize
-            dkt_memoize_single(params.n_concepts, params.model_id, checkpoint_path, params.mem_horizon, mem_path)
+            fsdata[-1].append(rundata)
             
             six.print_('Finished.')
+    
+    return fsdata
 
-def dkt_forwardsearch(params):
+def dkt_forwardsearch(params, horizon, use_mem=False):
     '''
-    Takes the trained models, and memoizes all of their possible outputs for
-    all possible histories up to length horizon, and dumps those arrays to a file.
-    Each length of history is in its own array.
-    Histories are indexed by treating them as numbers.
-    History is [(action,ob),(action,ob),...] and (action,ob) is converted to a number
-    and then the history is just treated as a number with a different base of |num action|*2
+    Runs forward search to extract their optimal policies and its performance in the simulator
     '''
     n_jobs = min(5, params.num_runs) # seems like there are problems on windows with multiple threads
     # need to be a multiple of number of jobs so I don't have to deal with uneven leftovers
     assert(params.num_runs % n_jobs == 0)
     runs_per_job = int(params.num_runs / n_jobs)
     
-    ignore = list(
-        Parallel(n_jobs=n_jobs)(delayed(dkt_memoize_chunk)(params,startix,runs_per_job) 
+    fsdata = []
+    
+    returned_data = list(
+        Parallel(n_jobs=n_jobs)(delayed(dkt_forwardsearch_chunk)(params,horizon,startix,runs_per_job,use_mem)
                                 for startix in six.moves.range(0,params.num_runs,runs_per_job)))
+    
+    for d in returned_data:
+        fsdata.extend(d)
+    
+    statfile = 'fsearch-{}-horizon{}.pickle'.format(params.run_name, horizon)
+    statpath = '{}/{}'.format(params.dir_name,statfile)
+    with open(statpath, 'wb') as f:
+        pickle.dump(fsdata,f)
+    
