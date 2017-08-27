@@ -265,3 +265,43 @@ def dkt_forwardsearch(params, horizon, use_mem=False):
     with open(statpath, 'wb') as f:
         pickle.dump(fsdata,f)
     
+def dkt_forwardsearch_ensemble(trainparams,testparams):
+    '''
+    Given a set of runs, test ensemble models with forward search
+    '''
+    
+    fsdata = []
+    
+    for en in six.moves.range(testparams.ensemble_split):
+        # compute how many runs to use
+        curr_num_runs = int((en+1) * trainparams.num_runs / testparams.ensemble_split)
+        fsdata.append([])
+        for ep in trainparams.saved_epochs:
+            print('=================================================')
+            print('---------- Split {:1d}/{:1d} Runs {} Epoch {:2d} ----------'.format(en+1,testparams.ensemble_split, curr_num_runs, ep))
+            print('=================================================')
+            
+            # create the checkpoints of all models
+            curr_checkpoints = []
+            for r in six.moves.range(curr_num_runs):
+                if not testparams.use_mem:
+                    checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+                    checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+                else:
+                    mem_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
+                    checkpoint_path = '{}/{}'.format(trainparams.dir_name,mem_name)
+                curr_checkpoints.append(checkpoint_path)
+            
+            # do the forward search
+            returned_data = dkt_forwardsearch_single(
+                trainparams.n_concepts, trainparams.model_id, curr_checkpoints, testparams.horizon, testparams.use_mem)
+            
+            # update stats
+            fsdata[-1].append(returned_data)
+            
+    
+    # save stats
+    stat_name = 'fsearchensemble-{}-horizon{}.pickle'.format(trainparams.run_name, testparams.horizon)
+    stats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
+    with open(stats_path, 'wb') as f:
+        pickle.dump(fsdata,f)

@@ -929,7 +929,7 @@ class TestParams:
         
         # for ensemble, how many partial ensembles to try
         # i.e if 5, then try 1/5, 2/5, 3/5, 4/5, 5/5 of all the models
-        self.ensemble_split = 5
+        self.ensemble_split = 10
         
         # for testing initialq values
         self.initialq_n_rollouts = 200000
@@ -1022,7 +1022,7 @@ if __name__ == '__main__':
         #mtrain.dkt_train_models(ct)
         #mtrain.dkt_memoize_models(ct)
         
-        fsearch.dkt_forwardsearch(ct, 6, use_mem=True)
+        #fsearch.dkt_forwardsearch(ct, 6, use_mem=True)
     #---------------------------------------------------------------------- 
     # test the saved models
     # don't train and test at the same time, alternate between them
@@ -1054,6 +1054,8 @@ if __name__ == '__main__':
     tpFalse = TestParams(use_real=False,use_mem=True)
     for ct in cur_train:
         pass
+        fsearch.dkt_forwardsearch_ensemble(ct,tp)
+        
         #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts(ct,tpFalse)
         
