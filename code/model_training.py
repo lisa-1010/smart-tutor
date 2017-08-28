@@ -63,7 +63,7 @@ def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
         r = runstartix + offset
         
         # new model instantiation
-        dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen-1, dropout=params.dropout, load_checkpoint=False)
+        dkt_model = dmc.DynamicsModel(model_id=params.model_id, timesteps=params.seqlen-1, dropout=params.dropout, output_dropout=params.output_dropout, load_checkpoint=False)
         
         epochs_trained = 0
         for ep in params.saved_epochs:
@@ -82,7 +82,7 @@ def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
                 # add noise every epoch, so the noise is randomly different every epoch
                 processed_input_data = input_data_ + (params.noise * np.random.randn(*input_data_.shape))
                 train_data = (processed_input_data[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
-                dkt_model.train(train_data, n_epoch=1, callbacks=ecall, shuffle=params.shuffle, dropout=params.dropout, output_dropout=params.output_dropout, load_checkpoint=False)
+                dkt_model.train(train_data, n_epoch=1, callbacks=ecall, shuffle=params.shuffle, load_checkpoint=False)
             
             # save the checkpoint
             checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
