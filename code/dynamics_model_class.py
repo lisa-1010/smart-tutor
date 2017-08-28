@@ -32,7 +32,7 @@ FLAGS = tf.flags.FLAGS
 
 class DynamicsModel(object):
 
-    def __init__(self, model_id, timesteps=1, dropout=1.0, load_checkpoint=False, use_sess=False):
+    def __init__(self, model_id, timesteps=1, dropout=1.0, output_dropout=1.0, load_checkpoint=False, use_sess=False):
         #print('Loading RNN dynamics model...')
 
         # if timesteps:
@@ -53,25 +53,29 @@ class DynamicsModel(object):
                                                                                      n_inputdim=self.model_dict["n_inputdim"],
                                                                                      n_hidden=self.model_dict["n_hidden"],
                                                                                      n_outputdim=self.model_dict["n_outputdim"],
-                                                                                     dropout=dropout)
+                                                                                     dropout=dropout,
+                                                                                     output_dropout=output_dropout)
             elif self.model_dict["architecture"] == 'simple':
                 self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net2(n_timesteps=timesteps,
                                                                                      n_inputdim=self.model_dict["n_inputdim"],
                                                                                      n_hidden=self.model_dict["n_hidden"],
                                                                                      n_outputdim=self.model_dict["n_outputdim"],
-                                                                                     dropout=dropout)
+                                                                                     dropout=dropout,
+                                                                                     output_dropout=output_dropout)
             elif self.model_dict["architecture"] == 'gru':
                 self.net, self.hidden_1, self.hidden_2 = self._build_regression_lstm_net_gru(n_timesteps=timesteps,
                                                                                      n_inputdim=self.model_dict["n_inputdim"],
                                                                                      n_hidden=self.model_dict["n_hidden"],
                                                                                      n_outputdim=self.model_dict["n_outputdim"],
-                                                                                     dropout=dropout)
+                                                                                     dropout=dropout,
+                                                                                     output_dropout=output_dropout)
             elif self.model_dict["architecture"] == 'grusimple':
                 self.net, self.hidden_1, self.hidden_2 = self._build_regression_gru_net2(n_timesteps=timesteps,
                                                                                      n_inputdim=self.model_dict["n_inputdim"],
                                                                                      n_hidden=self.model_dict["n_hidden"],
                                                                                      n_outputdim=self.model_dict["n_outputdim"],
-                                                                                     dropout=dropout)
+                                                                                     dropout=dropout,
+                                                                                     output_dropout=output_dropout)
             else:
                 assert(False)
 
@@ -137,12 +141,14 @@ class DynamicsModel(object):
         return net, hidden_states_1, hidden_states_2
     
     def _build_regression_gru_net2(self, n_timesteps=1, n_inputdim=None, n_hidden=None,
-                                           n_outputdim=None, dropout=1.0):
+                                           n_outputdim=None, dropout=1.0, output_dropout=1.0):
         # don't have 2 lstms, just have a shared output layer
         # this alternative doesn't seem to work as well
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
         net, hidden_states_1 = tflearn.gru(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="gru_1")
+        # only add dropout to the outputs
+        net = tflearn.dropout(net, output_dropout)
         net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in six.moves.range(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask

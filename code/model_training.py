@@ -82,7 +82,7 @@ def _dkt_train_models_chunk(params, runstartix, chunk_num_runs):
                 # add noise every epoch, so the noise is randomly different every epoch
                 processed_input_data = input_data_ + (params.noise * np.random.randn(*input_data_.shape))
                 train_data = (processed_input_data[:,:,:], output_mask_[:,:,:], target_data_[:,:,:])
-                dkt_model.train(train_data, n_epoch=1, callbacks=ecall, shuffle=params.shuffle, load_checkpoint=False)
+                dkt_model.train(train_data, n_epoch=1, callbacks=ecall, shuffle=params.shuffle, dropout=params.dropout, output_dropout=params.output_dropout, load_checkpoint=False)
             
             # save the checkpoint
             checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
@@ -238,11 +238,12 @@ class TrainParams(object):
     '''
     Parameters for training models. These are the ones corresponding to student2.
     '''
-    def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0,noise=0.0):
+    def __init__(self, rname, nruns, model_id, seqlen, saved_epochs, dropout=1.0,noise=0.0,output_dropout=1.0):
         self.model_id = model_id
         self.n_concepts = 4
         self.transition_after = True
         self.dropout = dropout
+        self.output_dropout = output_dropout
         self.shuffle = True
         # variance of gaussian noise added to the input
         self.noise = noise
@@ -261,9 +262,11 @@ class TrainParams(object):
         # these names are derived from above and should not be touched generally
         noise_str = '-noise{:.2f}'.format(self.noise) if self.noise > 0.0 else ''
         
+        output_dropout_str = '-outputdropout{:.2f}'.format(self.output_dropout) if self.output_dropout < 0.99 else ''
+        
         # folder to put the checkpoints into
-        self.dir_name = 'experiments/{}{}-dropout{}-shuffle{}-data-{}'.format(
-            self.model_id,noise_str,int(self.dropout*10),int(self.shuffle),self.datafile)
+        self.dir_name = 'experiments/{}{}-dropout{}{}-shuffle{}-data-{}'.format(
+            self.model_id,noise_str,int(self.dropout*10),output_dropout_str,int(self.shuffle),self.datafile)
         
         # pattern for the checkpoints
         self.checkpoint_pat = 'checkpoint-{}{}-epoch{}'

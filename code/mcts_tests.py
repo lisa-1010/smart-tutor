@@ -1013,13 +1013,14 @@ if __name__ == '__main__':
     # first look at stability of learning rate 0.0005
     #cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[40])]
     #cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[60],noise=0.05)]
+    cur_train = [mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[60],output_dropout=0.5),mtrain.TrainParams('runA',10,'test2_modelgrusimple_mid',5,[60],output_dropout=0.5,noise=0.05)]
     
     # now train 50 models
-    cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25]), mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],noise=0.05)]
+    #cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25]), mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],noise=0.05)]
     
     for ct in cur_train:
         pass
-        #mtrain.dkt_train_models(ct)
+        mtrain.dkt_train_models(ct)
         #mtrain.dkt_memoize_models(ct)
         
         #fsearch.dkt_forwardsearch(ct, 6, use_mem=True)
@@ -1054,7 +1055,7 @@ if __name__ == '__main__':
     tpFalse = TestParams(use_real=False,use_mem=True)
     for ct in cur_train:
         pass
-        fsearch.dkt_forwardsearch_ensemble(ct,tp)
+        #fsearch.dkt_forwardsearch_ensemble(ct,tp)
         
         #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts(ct,tpFalse)
