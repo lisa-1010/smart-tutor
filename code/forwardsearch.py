@@ -30,12 +30,6 @@ from joblib import Parallel, delayed
 from helpers import * # helper functions
 from simple_mdp import create_custom_dependency
 
-def sanitize_probs(n_concepts, probs):
-    if probs is None:
-        probs = np.zeros((n_concepts),)
-        probs[0] = 1.0
-    return probs
-
 def dkt_forwardsearch_single_recurse(n_concepts, dkt, sim, horizon, history_len):
     '''
     Given the current history, compute the q-values of the optimal policy according to the dkt

@@ -71,6 +71,12 @@ def percent_complete(data):
             count += 1
     return count / len(data)
 
+def sanitize_probs(n_concepts, probs):
+    if probs is None:
+        probs = np.zeros((n_concepts),)
+        probs[0] = 1.0
+    return probs
+
 ############ converting histories to indices ##############################
 
 def num_histories(index_base, horizon):

@@ -219,6 +219,10 @@ def make_student_action(n_concepts, action):
     conceptvec[action] = 1.0
     return StudentAction(concept, conceptvec)
 
+def make_student_action_vec(conceptvec):
+    concept = np.nonzero(conceptvec)[0]
+    return StudentAction(concept, conceptvec)
+
 class StudentExactSim(object):
     '''
     A model-based simulator for a student. Maintains its own internal hidden state. This wraps around the true simulator.

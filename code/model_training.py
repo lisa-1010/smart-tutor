@@ -232,6 +232,135 @@ def dkt_memoize_models(params):
                                 for startix in six.moves.range(0,params.num_runs,runs_per_job)))
 
 ############################################################################
+# multistep errors
+
+def dkt_multistep_single(n_concepts, n_trajectories, model_id, checkpoints, horizon, use_mem):
+    '''
+    Compute the multistep error per step for either both random and expert policies.
+    '''
+    if not use_mem:
+        model_list = []
+        for chkpt in checkpoints:
+            model = dmc.DynamicsModel(model_id, timesteps=horizon, load_checkpoint=False)
+            model.load(chkpt)
+            model_list.append(model)
+        dkt = dmc.RnnStudentSimEnsemble(model_list)
+    else:
+        mem_array_list = []
+        for chkpt in checkpoints:
+            mem_arrays = np.load(chkpt)['mem_arrays']
+            mem_array_list.append(mem_arrays)
+        dkt = dmc.RnnStudentSimMemEnsemble(n_concepts, mem_array_list)
+    
+    concept_tree = cdg.ConceptDependencyGraph()
+    concept_tree.init_default_tree(n_concepts)
+    test_student = st.Student2(n_concepts, True)
+    
+    # for both policies
+    policies = ['random', 'expert']
+    
+    # for horizons: 1,2,3,...,horizon
+    errors = np.zeros((2,horizon))
+    
+    for pol in six.moves.range(2):
+        for i in six.moves.range(n_trajectories):
+            curr_dkt = dkt.copy()
+            # sample a real trajectory
+            traj = dg.generate_student_sample(concept_tree,seqlen=horizon,student=test_student,policy=policies[pol])
+            for t in six.moves.range(horizon):
+                curr_action = st.make_student_action_vec(traj[t][0])
+                curr_ob = traj[t][1]
+                curr_probs = sanitize_probs(curr_dkt.sample_observations())
+                
+                # accumulate the error for this step
+                errors[pol,t] += np.square(curr_ob - curr_probs[curr_action])
+                
+                # advance dkt with sampled observation
+                sampled_ob = 1 if np.random.random() < curr_probs[curr_action] else 0
+                curr_dkt.advance_simulator(curr_action, sampled_ob)
+    
+    return errors / n_trajectories
+                
+        
+def dkt_multistep_single_checkpoint(params, n_trajectories, horizon, use_mem, r, ep):
+    print('=====================================')
+    print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+    print('=====================================')
+
+    if not use_mem:
+        # compute checkpoint name
+        checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
+        checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
+    else:
+        # compute outfile name
+        mem_name = params.mem_pat.format(params.run_name, r, ep)
+        checkpoint_path = '{}/{}'.format(params.dir_name,mem_name)
+
+    return dkt_multistep_single(params.n_concepts, n_trajectories, params.model_id, [checkpoint_path], horizon, use_mem)
+
+def dkt_multistep(params, horizon, use_mem=False):
+    '''
+    TODO
+    Runs forward search to extract their optimal policies and its performance in the simulator
+    '''
+    
+    outdata = []
+    
+    returned_data = list(
+        Parallel(n_jobs=n_jobs)(delayed(dkt_multistep_single_checkpoint)(params,horizon,startix,runs_per_job,use_mem)
+                                for startix in six.moves.range(0,params.num_runs,runs_per_job)))
+    
+    for d in returned_data:
+        fsdata.extend(d)
+    
+    statfile = 'fsearch-{}-horizon{}.pickle'.format(params.run_name, horizon)
+    statpath = '{}/{}'.format(params.dir_name,statfile)
+    with open(statpath, 'wb') as f:
+        pickle.dump(fsdata,f)
+    
+def dkt_multistep_ensemble(trainparams,testparams):
+    '''
+    TODO
+    Given a set of runs, test ensemble models with forward search
+    '''
+    
+    fsdata = []
+    
+    for en in six.moves.range(testparams.ensemble_split):
+        # compute how many runs to use
+        curr_num_runs = int((en+1) * trainparams.num_runs / testparams.ensemble_split)
+        fsdata.append([])
+        for ep in trainparams.saved_epochs:
+            print('=================================================')
+            print('---------- Split {:1d}/{:1d} Runs {} Epoch {:2d} ----------'.format(en+1,testparams.ensemble_split, curr_num_runs, ep))
+            print('=================================================')
+            
+            # create the checkpoints of all models
+            curr_checkpoints = []
+            for r in six.moves.range(curr_num_runs):
+                if not testparams.use_mem:
+                    checkpoint_name = trainparams.checkpoint_pat.format(trainparams.run_name, r, ep)
+                    checkpoint_path = '{}/{}'.format(trainparams.dir_name,checkpoint_name)
+                else:
+                    mem_name = trainparams.mem_pat.format(trainparams.run_name, r, ep)
+                    checkpoint_path = '{}/{}'.format(trainparams.dir_name,mem_name)
+                curr_checkpoints.append(checkpoint_path)
+            
+            # do the forward search
+            returned_data = dkt_forwardsearch_single(
+                trainparams.n_concepts, trainparams.model_id, curr_checkpoints, testparams.horizon, testparams.use_mem)
+            
+            # update stats
+            fsdata[-1].append(returned_data)
+            
+    
+    # save stats
+    stat_name = 'fsearchensemble-{}-horizon{}.pickle'.format(trainparams.run_name, testparams.horizon)
+    stats_path = '{}/{}'.format(trainparams.dir_name,stat_name)
+    with open(stats_path, 'wb') as f:
+        pickle.dump(fsdata,f)
+
+############################################################################
 # Parameters for training models and saving them
 ############################################################################
 class TrainParams(object):
