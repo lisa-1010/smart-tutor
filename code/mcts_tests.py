@@ -927,10 +927,6 @@ class TestParams:
         # whether to use the memoized versions or not
         self.use_mem = use_mem
         
-        # for ensemble, how many partial ensembles to try
-        # i.e if 5, then try 1/5, 2/5, 3/5, 4/5, 5/5 of all the models
-        self.ensemble_split = 10
-        
         # for testing initialq values
         self.initialq_n_rollouts = 200000
 
@@ -969,9 +965,9 @@ class TestParams:
         self.rmeproper_pat = 'rmeproper-rtype{}-rollouts{}-trajectories{}-{{}}'.format(
             self.r_type, self.rme_n_rollouts, self.rme_n_trajectories)
         
-        # stat filename pattern for ensemble testing
-        self.ensemble_pat = 'ensemble{}-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
-            self.ensemble_split, self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
+        # stat filename pattern for ensemble testing DEPRECATED
+        #self.ensemble_pat = 'ensemble{}-rtype{}-rollouts{}-trajectories{}-real{}-{{}}'.format(
+        #    self.ensemble_split, self.r_type, self.n_rollouts, self.n_trajectories, int(self.use_real))
 
 if __name__ == '__main__':
     starttime = time.time()
@@ -1017,7 +1013,12 @@ if __name__ == '__main__':
     
     # now train 50 models
     #cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25]), mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],noise=0.05)]
-    cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25],output_dropout=0.5),mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],output_dropout=0.5,noise=0.05)]
+    #cur_train = [mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25],output_dropout=0.5),mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],output_dropout=0.5,noise=0.05)]
+    
+    # testing stuff
+    cur_train = [
+        mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25]),
+    ]
     
     for ct in cur_train:
         pass
@@ -1056,7 +1057,7 @@ if __name__ == '__main__':
     for ct in cur_train:
         pass
         #fsearch.dkt_forwardsearch(ct, 6, use_mem=True)
-        fsearch.dkt_forwardsearch_ensemble(ct,tp)
+        fsearch.dkt_forwardsearch_ensemble(ct,10,20,6,True)
         
         #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts(ct,tpFalse)
