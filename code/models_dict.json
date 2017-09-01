@@ -78,6 +78,12 @@
         "n_inputdim": 8,
         "n_outputdim": 4
     },
+    "test2_modelgrusimple_large": {
+        "architecture": "grusimple",
+        "n_hidden": 50,
+        "n_inputdim": 8,
+        "n_outputdim": 4
+    },
     "test2_modelgru_mid": {
         "architecture": "gru",
         "n_hidden": 10,
