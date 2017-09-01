@@ -1028,7 +1028,8 @@ if __name__ == '__main__':
         #mtrain.dkt_train_models(ct)
         #mtrain.dkt_memoize_models(ct)
         
-        mtrain.dkt_multistep(ct, 10000, 6, True)
+        #mtrain.dkt_multistep(ct, 10000, 6, True)
+        mtrain.dkt_multistep_ensemble(ct, 10, 40, 10000, 6, True)
         
     #---------------------------------------------------------------------- 
     # test the saved models
