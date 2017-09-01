@@ -220,7 +220,7 @@ def make_student_action(n_concepts, action):
     return StudentAction(concept, conceptvec)
 
 def make_student_action_vec(conceptvec):
-    concept = np.nonzero(conceptvec)[0]
+    concept = np.nonzero(conceptvec)[0][0]
     return StudentAction(concept, conceptvec)
 
 class StudentExactSim(object):

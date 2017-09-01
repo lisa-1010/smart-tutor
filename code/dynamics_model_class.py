@@ -106,8 +106,8 @@ class DynamicsModel(object):
                                            n_outputdim=None, dropout=1.0):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
-        net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
-        net, hidden_states_2 = tflearn.lstm(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="lstm_2")
+        net, hidden_states_1 = tflearn.lstm(net, n_hidden, weights_init='xavier', return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
+        net, hidden_states_2 = tflearn.lstm(net, n_outputdim, weights_init='xavier', activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="lstm_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
@@ -120,8 +120,8 @@ class DynamicsModel(object):
         # this alternative doesn't seem to work as well
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
-        net, hidden_states_1 = tflearn.lstm(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
-        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in six.moves.range(n_timesteps)]
+        net, hidden_states_1 = tflearn.lstm(net, n_hidden, weights_init='xavier', return_seq=True, return_state=True, dropout=dropout, name="lstm_1")
+        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', weights_init='xavier', scope='output_shared', reuse=(i>0)) for i in six.moves.range(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
@@ -132,8 +132,8 @@ class DynamicsModel(object):
                                            n_outputdim=None, dropout=1.0):
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
-        net, hidden_states_1 = tflearn.gru(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="gru_1")
-        net, hidden_states_2 = tflearn.gru(net, n_outputdim, activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="gru_2")
+        net, hidden_states_1 = tflearn.gru(net, n_hidden, weights_init='xavier', return_seq=True, return_state=True, dropout=dropout, name="gru_1")
+        net, hidden_states_2 = tflearn.gru(net, n_outputdim, weights_init='xavier', activation='sigmoid', return_seq=True, return_state=True, dropout=dropout, name="gru_2")
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,
@@ -146,10 +146,10 @@ class DynamicsModel(object):
         # this alternative doesn't seem to work as well
         net = tflearn.input_data([None, n_timesteps, n_inputdim],dtype=tf.float32, name='input_data')
         output_mask = tflearn.input_data([None, n_timesteps, n_outputdim], dtype=tf.float32, name='output_mask')
-        net, hidden_states_1 = tflearn.gru(net, n_hidden, return_seq=True, return_state=True, dropout=dropout, name="gru_1")
+        net, hidden_states_1 = tflearn.gru(net, n_hidden, weights_init='xavier', return_seq=True, return_state=True, dropout=dropout, name="gru_1")
         # only add dropout to the outputs
         net = tflearn.dropout(net, output_dropout)
-        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', scope='output_shared', reuse=(i>0)) for i in six.moves.range(n_timesteps)]
+        net = [tflearn.fully_connected(net[i], n_outputdim, activation='sigmoid', weights_init='xavier', scope='output_shared', reuse=(i>0)) for i in six.moves.range(n_timesteps)]
         net = tf.stack(net, axis=1)
         net = net * output_mask
         net = tflearn.regression(net, optimizer='adam', learning_rate=0.0005,

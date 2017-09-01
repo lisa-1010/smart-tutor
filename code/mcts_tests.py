@@ -1018,12 +1018,17 @@ if __name__ == '__main__':
     # testing stuff
     cur_train = [
         mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25]),
+        mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],noise=0.05),
+        mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[25],output_dropout=0.5),
+        mtrain.TrainParams('runB',50,'test2_modelgrusimple_mid',5,[45],output_dropout=0.5,noise=0.05)
     ]
     
     for ct in cur_train:
         pass
         #mtrain.dkt_train_models(ct)
         #mtrain.dkt_memoize_models(ct)
+        
+        mtrain.dkt_multistep(ct, 10000, 6, True)
         
     #---------------------------------------------------------------------- 
     # test the saved models
@@ -1057,7 +1062,7 @@ if __name__ == '__main__':
     for ct in cur_train:
         pass
         #fsearch.dkt_forwardsearch(ct, 6, use_mem=True)
-        fsearch.dkt_forwardsearch_ensemble(ct,10,20,6,True)
+        #fsearch.dkt_forwardsearch_ensemble(ct,10,40,6,True)
         
         #dkt_test_models_mcts(ct,tp)
         #dkt_test_models_mcts(ct,tpFalse)

@@ -259,64 +259,77 @@ def dkt_multistep_single(n_concepts, n_trajectories, model_id, checkpoints, hori
     # for both policies
     policies = ['random', 'expert']
     
-    # for horizons: 1,2,3,...,horizon
-    errors = np.zeros((2,horizon))
+    # for horizons: 0,1,2,3,...,horizon
+    errors = np.zeros((2,horizon+1))
     
     for pol in six.moves.range(2):
         for i in six.moves.range(n_trajectories):
             curr_dkt = dkt.copy()
             # sample a real trajectory
-            traj = dg.generate_student_sample(concept_tree,seqlen=horizon,student=test_student,policy=policies[pol])
-            for t in six.moves.range(horizon):
+            traj = dg.generate_student_sample(concept_tree,seqlen=horizon+1,student=test_student,policy=policies[pol])
+            for t in six.moves.range(horizon+1):
                 curr_action = st.make_student_action_vec(traj[t][0])
                 curr_ob = traj[t][1]
-                curr_probs = sanitize_probs(curr_dkt.sample_observations())
-                
-                # accumulate the error for this step
-                errors[pol,t] += np.square(curr_ob - curr_probs[curr_action])
+                curr_probs = sanitize_probs(n_concepts, curr_dkt.sample_observations())
                 
                 # advance dkt with sampled observation
-                sampled_ob = 1 if np.random.random() < curr_probs[curr_action] else 0
+                sampled_ob = 1 if np.random.random() < curr_probs[curr_action.concept] else 0
                 curr_dkt.advance_simulator(curr_action, sampled_ob)
+                
+                # accumulate the error for this step
+                errors[pol,t] += np.square(curr_ob - curr_probs[curr_action.concept])
+    
+    if False:
+        six.print_('errors {}'.format(errors / n_trajectories))
     
     return errors / n_trajectories
                 
         
-def dkt_multistep_single_checkpoint(params, n_trajectories, horizon, use_mem, r, ep):
+def dkt_multistep_single_wrapper(params, n_trajectories, horizon, use_mem, checkpoints, runs, ep):
     print('=====================================')
-    print('---------- Rep {:2d} Epoch {:2d} ----------'.format(r, ep))
+    print('Started runs {} Epoch {:2d} ----------'.format(runs, ep))
     print('=====================================')
+    outdata = dkt_multistep_single(params.n_concepts, n_trajectories, params.model_id, checkpoints, horizon, use_mem)
+    print('Finished runs {} Epoch {:2d} ----------'.format(runs, ep))
+    return outdata
 
-    if not use_mem:
-        # compute checkpoint name
-        checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
-        checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
-    else:
-        # compute outfile name
-        mem_name = params.mem_pat.format(params.run_name, r, ep)
-        checkpoint_path = '{}/{}'.format(params.dir_name,mem_name)
-
-    return dkt_multistep_single(params.n_concepts, n_trajectories, params.model_id, [checkpoint_path], horizon, use_mem)
-
-def dkt_multistep(params, horizon, use_mem=False):
+def dkt_multistep(params, n_trajectories, horizon, use_mem):
     '''
-    TODO
-    Runs forward search to extract their optimal policies and its performance in the simulator
+    Computes the multistep error for every model up to the horizon.
     '''
+    n_jobs = 8
     
-    outdata = []
+    # get the checkpoints and model indices
+    worker_inputs = []
+    # outdata[modelix][ep][policy,horizon] = error
+    outdata = [[] for _ in six.moves.range(params.num_runs)]
+    for r in six.moves.range(params.num_runs):
+        for ep in params.saved_epochs:
+            if not use_mem:
+                # compute checkpoint name
+                checkpoint_name = params.checkpoint_pat.format(params.run_name, r, ep)
+                checkpoint_path = '{}/{}'.format(params.dir_name,checkpoint_name)
+            else:
+                # compute outfile name
+                mem_name = params.mem_pat.format(params.run_name, r, ep)
+                checkpoint_path = '{}/{}'.format(params.dir_name,mem_name)
+            
+            worker_inputs.append(([r],ep,[checkpoint_path]))
     
-    returned_data = list(
-        Parallel(n_jobs=n_jobs)(delayed(dkt_multistep_single_checkpoint)(params,horizon,startix,runs_per_job,use_mem)
-                                for startix in six.moves.range(0,params.num_runs,runs_per_job)))
+    flat_output = list(
+        Parallel(n_jobs=n_jobs)(delayed(dkt_multistep_single_wrapper)(params, n_trajectories, horizon, use_mem, checkpoints, runs, ep)
+                                for runs,ep,checkpoints in worker_inputs))
     
-    for d in returned_data:
-        fsdata.extend(d)
+    ix = 0
+    for r in six.moves.range(params.num_runs):
+        for ep in params.saved_epochs:
+            outdata[r].append(flat_output[ix])
+            ix+=1
     
-    statfile = 'fsearch-{}-horizon{}.pickle'.format(params.run_name, horizon)
+    statfile = 'multistep-{}-horizon{}-n{}.pickle'.format(params.run_name, horizon,n_trajectories)
     statpath = '{}/{}'.format(params.dir_name,statfile)
     with open(statpath, 'wb') as f:
-        pickle.dump(fsdata,f)
+        pickle.dump(outdata,f)
     
 def dkt_multistep_ensemble(trainparams,testparams):
     '''
