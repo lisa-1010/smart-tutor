@@ -1041,11 +1041,11 @@ if __name__ == '__main__':
     
     for ct in cur_train:
         pass
-        mtrain.dkt_train_models(ct)
+        #mtrain.dkt_train_models(ct)
         #mtrain.dkt_memoize_models(ct)
         
-        #mtrain.dkt_multistep(ct, 10000, 6, True)
-        #mtrain.dkt_multistep_ensemble(ct, 10, 40, 10000, 6, True)
+        mtrain.dkt_multistep(ct, 10000, 6, True)
+        mtrain.dkt_multistep_ensemble(ct, 10, 40, 10000, 6, True)
         
     #---------------------------------------------------------------------- 
     # test the saved models
@@ -1075,7 +1075,7 @@ if __name__ == '__main__':
 
     
     tp = TestParams(use_real=True,use_mem=True)
-    tpFalse = TestParams(use_real=False,use_mem=True)
+    #tpFalse = TestParams(use_real=False,use_mem=True)
     for ct in cur_train:
         pass
         #fsearch.dkt_forwardsearch(ct, 6, use_mem=True)
