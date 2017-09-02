@@ -1,0 +1,2 @@
+model_checkpoint_path: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2_modelgrusimple_large-dropout10-shuffle1-data-test2a-w4-n100000-l5-random.pickle/checkpoint-runA3-epoch50"
+all_model_checkpoint_paths: "/usr0/home/zguo/Documents/smart-tutor/code/experiments/test2_modelgrusimple_large-dropout10-shuffle1-data-test2a-w4-n100000-l5-random.pickle/checkpoint-runA3-epoch50"
