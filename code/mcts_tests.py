@@ -1032,20 +1032,21 @@ if __name__ == '__main__':
     #]
     
     # large model testing
-    cur_train = [
-        mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[15]),
-        mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[25],noise=0.05),
-        mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[15],output_dropout=0.5),
-        mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[25],output_dropout=0.5,noise=0.05)
-    ]
-    
+    #cur_train = [
+    #    mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[15]),
+    #    mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[25],noise=0.05),
+    #    mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[15],output_dropout=0.5),
+    #    mtrain.TrainParams('runB',50,'test2_modelgrusimple_large',5,[25],output_dropout=0.5,noise=0.05)
+    #]
+    # try larger ensembles
+    cur_train = [ mtrain.TrainParams('runC',100,'test2_modelgrusimple_large',5,[15]) ]
     for ct in cur_train:
         pass
         #mtrain.dkt_train_models(ct)
-        #mtrain.dkt_memoize_models(ct)
+        mtrain.dkt_memoize_models(ct)
         
-        mtrain.dkt_multistep(ct, 10000, 6, True)
-        mtrain.dkt_multistep_ensemble(ct, 10, 40, 10000, 6, True)
+        #mtrain.dkt_multistep(ct, 10000, 6, True)
+        #mtrain.dkt_multistep_ensemble(ct, 10, 40, 10000, 6, True)
         
     #---------------------------------------------------------------------- 
     # test the saved models
